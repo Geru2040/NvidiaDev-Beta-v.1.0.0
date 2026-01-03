@@ -125,7 +125,7 @@ def send_command(account_id, command, args=None):
             "args": args or {}
         }
         
-        response = requests.post(EXECUTE_ENDPOINT, json=payload, headers=headers, timeout=10)
+        response = requests.post(EXECUTE_ENDPOINT, json=payload, headers=headers, timeout=30)
         
         if response.status_code != 200:
             return {"success": False, "error": f"Status {response.status_code}"}
@@ -136,31 +136,51 @@ def send_command(account_id, command, args=None):
         if not command_id:
             return {"success": False, "error": "No command_id returned"}
         
-        for _ in range(20):
+        # Increase poll attempts and timeout for slower commands
+        max_attempts = 60  # 30 seconds total
+        for attempt in range(max_attempts):
             time.sleep(0.5)
-            status_response = requests.get(
-                f"{COMMAND_STATUS_ENDPOINT}?command_id={command_id}",
-                headers=headers,
-                timeout=5
-            )
             
-            if status_response.status_code == 200:
-                status_data = status_response.json()
-                if status_data.get("status") == "completed":
-                    return {
-                        "success": True,
-                        "data": status_data.get("response", {})
-                    }
-                elif status_data.get("status") == "failed":
-                    return {
-                        "success": False,
-                        "error": status_data.get("response", {}).get("error", "Command failed")
-                    }
+            try:
+                status_response = requests.get(
+                    f"{COMMAND_STATUS_ENDPOINT}?command_id={command_id}",
+                    headers=headers,
+                    timeout=10
+                )
+                
+                if status_response.status_code == 200:
+                    status_data = status_response.json()
+                    if status_data.get("status") == "completed":
+                        return {
+                            "success": True,
+                            "data": status_data.get("response", {})
+                        }
+                    elif status_data.get("status") == "failed":
+                        return {
+                            "success": False,
+                            "error": status_data.get("response", {}).get("error", "Command failed")
+                        }
+            except requests.exceptions.Timeout:
+                # Continue polling even if one request times out
+                if attempt < max_attempts - 1:
+                    continue
+                else:
+                    return {"success": False, "error": "Command status check timeout"}
+            except Exception as e:
+                # Continue polling on other errors
+                if attempt < max_attempts - 1:
+                    continue
+                else:
+                    return {"success": False, "error": f"Polling error: {str(e)}"}
         
-        return {"success": False, "error": "Command timeout"}
+        return {"success": False, "error": "Command timeout - no response received"}
         
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": "Connection timeout - server took too long to respond"}
+    except requests.exceptions.ConnectionError:
+        return {"success": False, "error": "Connection error - check your internet connection"}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
 
 def send_agent_command(agent_id, command, args=None):
     """Send command to private agent - works exactly like send_command"""
