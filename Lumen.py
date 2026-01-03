@@ -550,30 +550,48 @@ def cmd_attach():
     print(f"  \033[38;5;141m✓ Teleport initiated!\033[0m")
     print(f"  \033[38;5;93m→ Method: {method}\033[0m")
     
-    if "manual" in method.lower():
-        print(f"\n  \033[38;5;93m⚠️  Manual join required!\033[0m")
-        print(f"  \033[38;5;93m→ {data.get('note', 'Check game for instructions')}\033[0m")
+    # Check if it's a manual method (Clipboard or Browser)
+    if "clipboard" in method.lower() or "manual" in method.lower() or "browser" in method.lower():
+        print(f"\n  \033[38;5;135m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m")
+        print(f"  \033[38;5;135m📋 Manual Teleport Method Active\033[0m")
+        print(f"  \033[38;5;135m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n")
+        print(f"  \033[38;5;141m→ Method:\033[0m {method}")
+        if data.get('note'):
+            print(f"  \033[38;5;141m→ Note:\033[0m {data.get('note')}")
+        print(f"\n  \033[38;5;93m⚠️  Agent teleport triggered!\033[0m")
+        print(f"  \033[38;5;93m→ Check the agent's device for teleport GUI\033[0m")
+        print(f"  \033[38;5;93m→ If URL was copied, paste it in Roblox\033[0m")
+        print(f"  \033[38;5;93m→ Use 'agentstatus' to verify connection\033[0m\n")
         input("\n  Press Enter to continue...")
         return
     
-    success, game_info = wait_for_agent_reconnect(private_agent_id, place_id_int, max_wait=45)
-    
-    if success and game_info:
-        last_known_place_id = place_id_int
-        print(f"\n  \033[38;5;141m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m")
-        print(f"  \033[38;5;141m✓ AGENT SUCCESSFULLY ATTACHED!\033[0m")
-        print(f"  \033[38;5;141m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n")
-        print(f"  \033[38;5;135m📍 Game Name:\033[0m {game_info.get('name', 'Unknown')}")
-        print(f"  \033[38;5;135m📍 Place ID:\033[0m {place_id}")
-        print(f"  \033[38;5;135m👥 Players:\033[0m {game_info.get('players', 'Unknown')}")
-        print(f"  \033[38;5;135m🛡️  Anti-AFK:\033[0m Active")
-        if auto_script:
-            print(f"  \033[38;5;135m📜 Auto-Script:\033[0m Executed")
-        print()
+    # For DeepLink and TeleportService methods, wait for reconnect
+    if "deeplink" in method.lower() or "teleportservice" in method.lower():
+        print(f"\n  \033[38;5;135m→ Deep link teleport triggered!\033[0m")
+        print(f"  \033[38;5;93m→ Agent should be joining game now...\033[0m")
+        
+        success, game_info = wait_for_agent_reconnect(private_agent_id, place_id_int, max_wait=60)
+        
+        if success and game_info:
+            last_known_place_id = place_id_int
+            print(f"\n  \033[38;5;141m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m")
+            print(f"  \033[38;5;141m✓ AGENT SUCCESSFULLY ATTACHED!\033[0m")
+            print(f"  \033[38;5;141m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n")
+            print(f"  \033[38;5;135m📍 Game Name:\033[0m {game_info.get('name', 'Unknown')}")
+            print(f"  \033[38;5;135m📍 Place ID:\033[0m {place_id}")
+            print(f"  \033[38;5;135m👥 Players:\033[0m {game_info.get('players', 'Unknown')}")
+            print(f"  \033[38;5;135m🛡️  Anti-AFK:\033[0m Active")
+            if auto_script:
+                print(f"  \033[38;5;135m📜 Auto-Script:\033[0m Executed")
+            print()
+        else:
+            print(f"\n  \033[38;5;93m⚠️  Could not verify connection within 60 seconds\033[0m")
+            print(f"  \033[38;5;93m→ Agent may still be loading the game\033[0m")
+            print(f"  \033[38;5;93m→ Use 'agentstatus' command to check manually\033[0m")
     else:
-        print(f"\n  \033[38;5;93m⚠️  Could not verify connection\033[0m")
-        print(f"  \033[38;5;93m→ Agent may still be loading or in a different game\033[0m")
-        print(f"  \033[38;5;93m→ Use 'agentstatus' command to check manually\033[0m")
+        # Unknown method, just show info
+        print(f"\n  \033[38;5;135m→ Teleport command sent\033[0m")
+        print(f"  \033[38;5;93m→ Use 'agentstatus' to verify connection\033[0m")
     
     input("\n  Press Enter to continue...")
 
