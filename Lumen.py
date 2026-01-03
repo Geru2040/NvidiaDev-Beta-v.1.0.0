@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 import sys
 import time
-import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # API Configuration
 API_BASE = "https://lseypdqwyekqdndladsk.supabase.co/functions/v1"
@@ -197,9 +197,57 @@ def get_agent_status(agent_id, timeout=5):
     except Exception as e:
         return None
 
-def get_agent_status_threaded(agent_id, results_dict, index):
-    """Thread worker to fetch agent status"""
-    results_dict[index] = get_agent_status(agent_id, timeout=3)
+def get_agent_status_fast(agent_id):
+    """Fast agent status check with reduced timeout"""
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": API_KEY,
+            "Authorization": f"Bearer {API_KEY}"
+        }
+        
+        payload = {
+            "roblox_account_id": f"agent_{agent_id}",
+            "command": "agent_status",
+            "args": {}
+        }
+        
+        response = requests.post(EXECUTE_ENDPOINT, json=payload, headers=headers, timeout=3)
+        
+        if response.status_code != 200:
+            return None
+        
+        result = response.json()
+        command_id = result.get("command_id")
+        
+        if not command_id:
+            return None
+        
+        # Reduced polling for faster checks
+        max_attempts = 6  # 3 seconds total
+        for attempt in range(max_attempts):
+            time.sleep(0.5)
+            
+            try:
+                status_response = requests.get(
+                    f"{COMMAND_STATUS_ENDPOINT}?command_id={command_id}",
+                    headers=headers,
+                    timeout=2
+                )
+                
+                if status_response.status_code == 200:
+                    status_data = status_response.json()
+                    if status_data.get("status") == "completed":
+                        return status_data.get("response", {})
+                    elif status_data.get("status") == "failed":
+                        return None
+            except:
+                continue
+        
+        return None
+        
+    except:
+        return None
 
 def wait_for_agent_reconnect(agent_id, target_place_id, max_wait=60):
     """Wait for agent to reconnect after game hop"""
@@ -227,7 +275,374 @@ def wait_for_agent_reconnect(agent_id, target_place_id, max_wait=60):
                     return True, current_game
                 
                 if not last_status or last_status.get('place_id') != current_place_id:
-                    print(f"\n  \033[38;5;135m→ Executing on agent...\033[0m")
+                    print(f"\n  \033[38;5;93m→ Detected in: {current_game.get('name', 'Unknown')} (ID: {current_place_id})\033[0m")
+                    if current_place_id != target_place_id:
+                        print(f"  \033[38;5;93m→ Still waiting for target game {target_place_id}...\033[0m")
+                    last_status = current_game
+        
+        time.sleep(2)
+    
+    print("\n\n  \033[38;5;196m✗ Connection timeout\033[0m")
+    print(f"  \033[38;5;93m→ Agent may still be loading or teleport failed\033[0m")
+    return False, None
+
+def cmd_agent_list():
+    """List all saved agents with status - OPTIMIZED VERSION"""
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║            SAVED AGENTS LIST                  ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    agents = load_agents()
+    
+    if not agents:
+        print("  \033[38;5;93m→ No saved agents found\033[0m")
+        print("  \033[38;5;93m→ Connect to an agent to save it\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+    
+    print(f"  \033[38;5;135m→ Found {len(agents)} saved agent(s)\033[0m")
+    print("  \033[38;5;93m→ Checking status (parallel)...\033[0m\n")
+    
+    print("  \033[38;5;93m" + "─"*45 + "\033[0m\n")
+    
+    # Fetch all agent statuses in parallel using ThreadPoolExecutor
+    agent_statuses = {}
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # Submit all status check tasks
+        future_to_agent = {executor.submit(get_agent_status_fast, agent['id']): agent['id'] for agent in agents}
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_agent):
+            agent_id = future_to_agent[future]
+            try:
+                status = future.result()
+                agent_statuses[agent_id] = status
+            except Exception as e:
+                agent_statuses[agent_id] = None
+    
+    # Display agents with status
+    for i, agent in enumerate(agents, 1):
+        agent_id = agent['id']
+        
+        # Safe datetime parsing
+        try:
+            added_on = datetime.fromisoformat(agent['added_on']).strftime("%Y-%m-%d %H:%M")
+        except:
+            added_on = agent.get('added_on', 'Unknown')
+        
+        try:
+            last_used = datetime.fromisoformat(agent['last_used']).strftime("%Y-%m-%d %H:%M")
+        except:
+            last_used = agent.get('last_used', 'Unknown')
+        
+        status = agent_statuses.get(agent_id)
+        
+        # Display agent info
+        print(f"  \033[38;5;141m[{i}] Agent ID:\033[0m {agent_id}")
+        print(f"      \033[38;5;93mAdded:\033[0m {added_on}")
+        print(f"      \033[38;5;93mLast Used:\033[0m {last_used}")
+        
+        if status:
+            print(f"      \033[38;5;141m✓ Status: ONLINE\033[0m")
+            print(f"      \033[38;5;135mUptime:\033[0m {status.get('uptime', 0)} minutes")
+            
+            if status.get('current_game'):
+                game = status['current_game']
+                print(f"      \033[38;5;135m📍 Game:\033[0m {game.get('name', 'Unknown')}")
+                print(f"      \033[38;5;135m📍 Place ID:\033[0m {game.get('place_id', 'Unknown')}")
+        else:
+            print(f"      \033[38;5;196m✗ Status: OFFLINE\033[0m")
+        
+        print()
+    
+    print("  \033[38;5;93m" + "─"*45 + "\033[0m\n")
+    print("  \033[38;5;93mType agent number to connect (e.g., '1')\033[0m")
+    print("  \033[38;5;93mType 'remove <number>' to delete (e.g., 'remove 2')\033[0m")
+    print("  \033[38;5;93mType 'back' to return\033[0m\n")
+    
+    choice = input("  → ").strip().lower()
+    
+    if choice == "back" or choice == "":
+        return
+    
+    # Handle remove command
+    if choice.startswith("remove "):
+        try:
+            agent_num = int(choice.split()[1])
+            idx = agent_num - 1
+            
+            if 0 <= idx < len(agents):
+                removed_id = agents[idx]['id']
+                remove_agent_from_storage(removed_id)
+                print(f"\n  \033[38;5;141m✓ Removed agent {removed_id}\033[0m")
+            else:
+                print("\n  \033[38;5;196m✗ Invalid agent number\033[0m")
+            
+            time.sleep(1.5)
+            return cmd_agent_list()  # Refresh the list
+        except (ValueError, IndexError):
+            print("\n  \033[38;5;196m✗ Invalid format. Use: remove <number>\033[0m")
+            time.sleep(1.5)
+            return cmd_agent_list()
+    
+    # Handle connect to agent
+    try:
+        agent_num = int(choice)
+        idx = agent_num - 1
+        
+        if 0 <= idx < len(agents):
+            global private_agent_id
+            private_agent_id = agents[idx]['id']
+            
+            # Update last_used with current timestamp
+            agents[idx]['last_used'] = datetime.now().isoformat()
+            save_agents(agents)
+            
+            print(f"\n  \033[38;5;141m✓ Connected to agent {private_agent_id}\033[0m")
+            
+            # Show agent status
+            status = agent_statuses.get(private_agent_id)
+            if status:
+                if status.get('current_game'):
+                    game = status['current_game']
+                    print(f"  \033[38;5;135m→ Currently in: {game.get('name', 'Unknown')}\033[0m")
+            
+            time.sleep(2)
+        else:
+            print("\n  \033[38;5;196m✗ Invalid agent number\033[0m")
+            time.sleep(1.5)
+            return cmd_agent_list()
+    except ValueError:
+        print("\n  \033[38;5;196m✗ Invalid input. Enter a number or 'remove <number>'\033[0m")
+        time.sleep(1.5)
+        return cmd_agent_list()
+
+def cmd_agent():
+    """Private Agent management"""
+    global private_agent_id, agent_status
+    
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║          PRIVATE AGENT MANAGER                ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    if private_agent_id:
+        print(f"  \033[38;5;141m✓ Current Agent:\033[0m {private_agent_id}\n")
+        
+        status = get_agent_status(private_agent_id)
+        if status:
+            print(f"  \033[38;5;135mStatus:\033[0m {status.get('status', 'Unknown')}")
+            if status.get('current_game'):
+                print(f"  \033[38;5;135mGame:\033[0m {status['current_game']['name']} (ID: {status['current_game']['place_id']})")
+            if status.get('uptime'):
+                print(f"  \033[38;5;135mUptime:\033[0m {status['uptime']} minutes")
+            print()
+        
+        print("  \033[38;5;93m[1]\033[0m Change Agent")
+        print("  \033[38;5;93m[2]\033[0m Disconnect Agent")
+        print("  \033[38;5;93m[3]\033[0m Back\n")
+        
+        choice = input("  Select → ").strip()
+        
+        if choice == "1":
+            private_agent_id = None
+            agent_status = None
+            return cmd_agent()
+        elif choice == "2":
+            print(f"\n  \033[38;5;135m→ Disconnecting agent...\033[0m")
+            send_agent_command(private_agent_id, "agent_disconnect")
+            private_agent_id = None
+            agent_status = None
+            print("  \033[38;5;141m✓ Agent disconnected\033[0m")
+            time.sleep(1.5)
+        return
+    
+    print("  \033[38;5;93mEnter your Private Agent's Roblox User ID\033[0m")
+    print("  \033[38;5;93m(This should be your alt account)\033[0m\n")
+    
+    agent_id = input("  Agent User ID → ").strip()
+    
+    if not agent_id:
+        print("\n  ✗ Invalid agent ID")
+        time.sleep(1.5)
+        return
+    
+    print(f"\n  \033[38;5;135m→ Connecting to agent {agent_id}...\033[0m")
+    time.sleep(1)
+    
+    result = send_agent_command(agent_id, "agent_ping")
+    if result.get("success"):
+        private_agent_id = agent_id
+        
+        # Save agent to storage
+        add_agent_to_storage(agent_id)
+        
+        print(f"  \033[38;5;141m✓ Agent connected successfully!\033[0m")
+        print(f"  \033[38;5;93m→ Agent ID: {agent_id}\033[0m")
+        print(f"  \033[38;5;141m→ Agent saved for future use\033[0m\n")
+    else:
+        print(f"  \033[38;5;196m✗ Connection failed\033[0m")
+        print(f"  \033[38;5;93m→ Make sure agent script is running on alt account\033[0m\n")
+    
+    input("\n  Press Enter to continue...")
+
+def cmd_attach():
+    """Attach agent to a game with auto-reconnect detection"""
+    global private_agent_id, last_known_place_id
+    
+    if not private_agent_id:
+        clear()
+        banner()
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        print("  \033[38;5;93m→ Run 'agent' command first\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+    
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║           ATTACH AGENT TO GAME                ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    print(f"  \033[38;5;93m→ Agent ID: {private_agent_id}\033[0m")
+    print("  \033[38;5;135m→ Enter Game Place ID to attach\033[0m")
+    print("  \033[38;5;93m→ Type 'cancel' to go back\033[0m\n")
+    
+    place_id = input("  Place ID → ").strip()
+    
+    if not place_id or place_id.lower() == "cancel":
+        print("\n  → Cancelled\n")
+        time.sleep(0.8)
+        return
+    
+    try:
+        place_id_int = int(place_id)
+    except ValueError:
+        print("\n  \033[38;5;196m✗ Invalid Place ID (must be a number)\033[0m")
+        input("\n  Press Enter to continue...")
+        return
+    
+    print("\n  \033[38;5;93m→ Auto-execute script after joining? (optional)\033[0m")
+    print("  \033[38;5;93m→ Enter script URL or press Enter to skip\033[0m\n")
+    auto_script = input("  Script URL → ").strip()
+    
+    print(f"\n  \033[38;5;135m→ Sending attach command to agent...\033[0m")
+    
+    args = {
+        "place_id": place_id
+    }
+    if auto_script:
+        args["auto_script"] = auto_script
+    
+    result = send_agent_command(private_agent_id, "agent_attach", args)
+    
+    if not result.get("success"):
+        print("\n  \033[38;5;196m✗ Failed to send attach command\033[0m")
+        print(f"  Error: {result.get('error', 'Unknown')}")
+        input("\n  Press Enter to continue...")
+        return
+    
+    data = result.get("data", {})
+    method = data.get("method", "Unknown")
+    print(f"  \033[38;5;141m✓ Teleport initiated!\033[0m")
+    print(f"  \033[38;5;93m→ Method: {method}\033[0m")
+    
+    if "manual" in method.lower():
+        print(f"\n  \033[38;5;93m⚠️  Manual join required!\033[0m")
+        print(f"  \033[38;5;93m→ {data.get('note', 'Check game for instructions')}\033[0m")
+        input("\n  Press Enter to continue...")
+        return
+    
+    success, game_info = wait_for_agent_reconnect(private_agent_id, place_id_int, max_wait=45)
+    
+    if success and game_info:
+        last_known_place_id = place_id_int
+        print(f"\n  \033[38;5;141m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m")
+        print(f"  \033[38;5;141m✓ AGENT SUCCESSFULLY ATTACHED!\033[0m")
+        print(f"  \033[38;5;141m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n")
+        print(f"  \033[38;5;135m📍 Game Name:\033[0m {game_info.get('name', 'Unknown')}")
+        print(f"  \033[38;5;135m📍 Place ID:\033[0m {place_id}")
+        print(f"  \033[38;5;135m👥 Players:\033[0m {game_info.get('players', 'Unknown')}")
+        print(f"  \033[38;5;135m🛡️  Anti-AFK:\033[0m Active")
+        if auto_script:
+            print(f"  \033[38;5;135m📜 Auto-Script:\033[0m Executed")
+        print()
+    else:
+        print(f"\n  \033[38;5;93m⚠️  Could not verify connection\033[0m")
+        print(f"  \033[38;5;93m→ Agent may still be loading or in a different game\033[0m")
+        print(f"  \033[38;5;93m→ Use 'agentstatus' command to check manually\033[0m")
+    
+    input("\n  Press Enter to continue...")
+
+def cmd_agent_status():
+    """Check agent status and control"""
+    global private_agent_id
+    
+    if not private_agent_id:
+        clear()
+        banner()
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        print("  \033[38;5;93m→ Run 'agent' command first\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+    
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║            AGENT STATUS & CONTROL             ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    print(f"  \033[38;5;135m→ Fetching agent status...\033[0m\n")
+    
+    status = get_agent_status(private_agent_id)
+    
+    if not status:
+        print("  \033[38;5;196m✗ Could not fetch agent status\033[0m")
+        input("\n  Press Enter to continue...")
+        return
+    
+    print(f"  \033[38;5;141m✓ Agent ID:\033[0m {private_agent_id}")
+    print(f"  \033[38;5;141m✓ Status:\033[0m {status.get('status', 'Unknown')}")
+    print(f"  \033[38;5;141m✓ Uptime:\033[0m {status.get('uptime', 0)} minutes")
+    
+    if status.get('current_game'):
+        game = status['current_game']
+        print(f"\n  \033[38;5;135m📍 Current Game:\033[0m")
+        print(f"     Name: {game.get('name', 'Unknown')}")
+        print(f"     Place ID: {game.get('place_id', 'Unknown')}")
+        print(f"     Players: {game.get('players', 'Unknown')}")
+        print(f"     Time in game: {game.get('time_in_game', 0)} minutes")
+    else:
+        print(f"\n  \033[38;5;93m→ Not currently in a game\033[0m")
+    
+    if status.get('anti_afk_active'):
+        print(f"\n  \033[38;5;141m✓ Anti-AFK:\033[0m Active")
+    
+    print("\n  \033[38;5;93m" + "─"*45 + "\033[0m\n")
+    print("  \033[38;5;93m[1]\033[0m Leave Current Game")
+    print("  \033[38;5;93m[2]\033[0m Execute Script on Agent")
+    print("  \033[38;5;93m[3]\033[0m Get Game Data")
+    print("  \033[38;5;93m[4]\033[0m Back\n")
+    
+    choice = input("  Select → ").strip()
+    
+    if choice == "1":
+        print(f"\n  \033[38;5;135m→ Instructing agent to leave game...\033[0m")
+        result = send_agent_command(private_agent_id, "agent_leave_game")
+        if result.get("success"):
+            print("  \033[38;5;141m✓ Agent left the game\033[0m")
+        else:
+            print("  \033[38;5;196m✗ Failed to leave game\033[0m")
+        time.sleep(1.5)
+    
+    elif choice == "2":
+        print("\n  \033[38;5;135m→ Enter script URL or Lua code\033[0m\n")
+        script = input("  Script → ").strip()
+        if script:
+            print(f"\n  \033[38;5;135m→ Executing on agent...\033[0m")
             result = send_agent_command(private_agent_id, "agent_execute", {"script": script})
             if result.get("success"):
                 print("  \033[38;5;141m✓ Script executed\033[0m")
@@ -843,383 +1258,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n\n  → Shutting down Lumen\n")
         sys.exit(0)
-        ;93m→ Detected in: {current_game.get('name', 'Unknown')} (ID: {current_place_id})\033[0m")
-                    if current_place_id != target_place_id:
-                        print(f"  \033[38;5;93m→ Still waiting for target game {target_place_id}...\033[0m")
-                    last_status = current_game
-        
-        time.sleep(2)
-    
-    print("\n\n  \033[38;5;196m✗ Connection timeout\033[0m")
-    print(f"  \033[38;5;93m→ Agent may still be loading or teleport failed\033[0m")
-    return False, None
-
-def cmd_agent_list():
-    """List all saved agents with status"""
-    clear()
-    banner()
-    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
-    print("\033[38;5;141m║            SAVED AGENTS LIST                  ║\033[0m")
-    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
-    agents = load_agents()
-    
-    if not agents:
-        print("  \033[38;5;93m→ No saved agents found\033[0m")
-        print("  \033[38;5;93m→ Connect to an agent to save it\033[0m\n")
-        input("\n  Press Enter to continue...")
-        return
-    
-    print(f"  \033[38;5;135m→ Found {len(agents)} saved agent(s)\033[0m")
-    print("  \033[38;5;93m→ Checking status (this may take a few seconds)...\033[0m\n")
-    
-    # Fetch all agent statuses using threads for faster loading
-    agent_statuses = {}
-    threads = []
-    results = {}
-    
-    for i, agent in enumerate(agents):
-        agent_id = agent['id']
-        thread = threading.Thread(target=get_agent_status_threaded, args=(agent_id, results, i))
-        thread.daemon = True
-        thread.start()
-        threads.append(thread)
-    
-    # Wait for all threads with timeout
-    for thread in threads:
-        thread.join(timeout=5)
-    
-    # Map results back to agent IDs
-    for i, agent in enumerate(agents):
-        agent_statuses[agent['id']] = results.get(i)
-    
-    clear()
-    banner()
-    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
-    print("\033[38;5;141m║            SAVED AGENTS LIST                  ║\033[0m")
-    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
-    print(f"  \033[38;5;135m→ Found {len(agents)} saved agent(s)\033[0m")
-    print("  \033[38;5;93m" + "─"*45 + "\033[0m\n")
-    
-    # Display agents with status
-    for i, agent in enumerate(agents, 1):
-        agent_id = agent['id']
-        
-        # Safe datetime parsing
-        try:
-            added_on = datetime.fromisoformat(agent['added_on']).strftime("%Y-%m-%d %H:%M")
-        except:
-            added_on = agent.get('added_on', 'Unknown')
-        
-        try:
-            last_used = datetime.fromisoformat(agent['last_used']).strftime("%Y-%m-%d %H:%M")
-        except:
-            last_used = agent.get('last_used', 'Unknown')
-        
-        status = agent_statuses.get(agent_id)
-        
-        # Display agent info
-        print(f"  \033[38;5;141m[{i}] Agent ID:\033[0m {agent_id}")
-        print(f"      \033[38;5;93mAdded:\033[0m {added_on}")
-        print(f"      \033[38;5;93mLast Used:\033[0m {last_used}")
-        
-        if status:
-            print(f"      \033[38;5;141m✓ Status: ONLINE\033[0m")
-            print(f"      \033[38;5;135mUptime:\033[0m {status.get('uptime', 0)} minutes")
-            
-            if status.get('current_game'):
-                game = status['current_game']
-                print(f"      \033[38;5;135m📍 Game:\033[0m {game.get('name', 'Unknown')}")
-                print(f"      \033[38;5;135m📍 Place ID:\033[0m {game.get('place_id', 'Unknown')}")
-        else:
-            print(f"      \033[38;5;196m✗ Status: OFFLINE\033[0m")
-        
-        print()
-    
-    print("  \033[38;5;93m" + "─"*45 + "\033[0m\n")
-    print("  \033[38;5;93mType agent number to connect (e.g., '1')\033[0m")
-    print("  \033[38;5;93mType 'remove <number>' to delete (e.g., 'remove 2')\033[0m")
-    print("  \033[38;5;93mType 'back' to return\033[0m\n")
-    
-    choice = input("  → ").strip().lower()
-    
-    if choice == "back" or choice == "":
-        return
-    
-    # Handle remove command
-    if choice.startswith("remove "):
-        try:
-            agent_num = int(choice.split()[1])
-            idx = agent_num - 1
-            
-            if 0 <= idx < len(agents):
-                removed_id = agents[idx]['id']
-                remove_agent_from_storage(removed_id)
-                print(f"\n  \033[38;5;141m✓ Removed agent {removed_id}\033[0m")
-            else:
-                print("\n  \033[38;5;196m✗ Invalid agent number\033[0m")
-            
-            time.sleep(1.5)
-            return cmd_agent_list()  # Refresh the list
-        except (ValueError, IndexError):
-            print("\n  \033[38;5;196m✗ Invalid format. Use: remove <number>\033[0m")
-            time.sleep(1.5)
-            return cmd_agent_list()
-    
-    # Handle connect to agent
-    try:
-        agent_num = int(choice)
-        idx = agent_num - 1
-        
-        if 0 <= idx < len(agents):
-            global private_agent_id
-            private_agent_id = agents[idx]['id']
-            
-            # Update last_used with current timestamp
-            agents[idx]['last_used'] = datetime.now().isoformat()
-            save_agents(agents)
-            
-            print(f"\n  \033[38;5;141m✓ Connected to agent {private_agent_id}\033[0m")
-            
-            # Show agent status
-            status = agent_statuses.get(private_agent_id)
-            if status:
-                if status.get('current_game'):
-                    game = status['current_game']
-                    print(f"  \033[38;5;135m→ Currently in: {game.get('name', 'Unknown')}\033[0m")
-            
-            time.sleep(2)
-        else:
-            print("\n  \033[38;5;196m✗ Invalid agent number\033[0m")
-            time.sleep(1.5)
-            return cmd_agent_list()
-    except ValueError:
-        print("\n  \033[38;5;196m✗ Invalid input. Enter a number or 'remove <number>'\033[0m")
-        time.sleep(1.5)
-        return cmd_agent_list()
-
-def cmd_agent():
-    """Private Agent management"""
-    global private_agent_id, agent_status
-    
-    clear()
-    banner()
-    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
-    print("\033[38;5;141m║          PRIVATE AGENT MANAGER                ║\033[0m")
-    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
-    if private_agent_id:
-        print(f"  \033[38;5;141m✓ Current Agent:\033[0m {private_agent_id}\n")
-        
-        status = get_agent_status(private_agent_id)
-        if status:
-            print(f"  \033[38;5;135mStatus:\033[0m {status.get('status', 'Unknown')}")
-            if status.get('current_game'):
-                print(f"  \033[38;5;135mGame:\033[0m {status['current_game']['name']} (ID: {status['current_game']['place_id']})")
-            if status.get('uptime'):
-                print(f"  \033[38;5;135mUptime:\033[0m {status['uptime']} minutes")
-            print()
-        
-        print("  \033[38;5;93m[1]\033[0m Change Agent")
-        print("  \033[38;5;93m[2]\033[0m Disconnect Agent")
-        print("  \033[38;5;93m[3]\033[0m Back\n")
-        
-        choice = input("  Select → ").strip()
-        
-        if choice == "1":
-            private_agent_id = None
-            agent_status = None
-            return cmd_agent()
-        elif choice == "2":
-            print(f"\n  \033[38;5;135m→ Disconnecting agent...\033[0m")
-            send_agent_command(private_agent_id, "agent_disconnect")
-            private_agent_id = None
-            agent_status = None
-            print("  \033[38;5;141m✓ Agent disconnected\033[0m")
-            time.sleep(1.5)
-        return
-    
-    print("  \033[38;5;93mEnter your Private Agent's Roblox User ID\033[0m")
-    print("  \033[38;5;93m(This should be your alt account)\033[0m\n")
-    
-    agent_id = input("  Agent User ID → ").strip()
-    
-    if not agent_id:
-        print("\n  ✗ Invalid agent ID")
-        time.sleep(1.5)
-        return
-    
-    print(f"\n  \033[38;5;135m→ Connecting to agent {agent_id}...\033[0m")
-    time.sleep(1)
-    
-    result = send_agent_command(agent_id, "agent_ping")
-    if result.get("success"):
-        private_agent_id = agent_id
-        
-        # Save agent to storage
-        add_agent_to_storage(agent_id)
-        
-        print(f"  \033[38;5;141m✓ Agent connected successfully!\033[0m")
-        print(f"  \033[38;5;93m→ Agent ID: {agent_id}\033[0m")
-        print(f"  \033[38;5;141m→ Agent saved for future use\033[0m\n")
-    else:
-        print(f"  \033[38;5;196m✗ Connection failed\033[0m")
-        print(f"  \033[38;5;93m→ Make sure agent script is running on alt account\033[0m\n")
-    
-    input("\n  Press Enter to continue...")
-
-def cmd_attach():
-    """Attach agent to a game with auto-reconnect detection"""
-    global private_agent_id, last_known_place_id
-    
-    if not private_agent_id:
-        clear()
-        banner()
-        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
-        print("  \033[38;5;93m→ Run 'agent' command first\033[0m\n")
-        input("\n  Press Enter to continue...")
-        return
-    
-    clear()
-    banner()
-    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
-    print("\033[38;5;141m║           ATTACH AGENT TO GAME                ║\033[0m")
-    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
-    print(f"  \033[38;5;93m→ Agent ID: {private_agent_id}\033[0m")
-    print("  \033[38;5;135m→ Enter Game Place ID to attach\033[0m")
-    print("  \033[38;5;93m→ Type 'cancel' to go back\033[0m\n")
-    
-    place_id = input("  Place ID → ").strip()
-    
-    if not place_id or place_id.lower() == "cancel":
-        print("\n  → Cancelled\n")
-        time.sleep(0.8)
-        return
-    
-    try:
-        place_id_int = int(place_id)
-    except ValueError:
-        print("\n  \033[38;5;196m✗ Invalid Place ID (must be a number)\033[0m")
-        input("\n  Press Enter to continue...")
-        return
-    
-    print("\n  \033[38;5;93m→ Auto-execute script after joining? (optional)\033[0m")
-    print("  \033[38;5;93m→ Enter script URL or press Enter to skip\033[0m\n")
-    auto_script = input("  Script URL → ").strip()
-    
-    print(f"\n  \033[38;5;135m→ Sending attach command to agent...\033[0m")
-    
-    args = {
-        "place_id": place_id
-    }
-    if auto_script:
-        args["auto_script"] = auto_script
-    
-    result = send_agent_command(private_agent_id, "agent_attach", args)
-    
-    if not result.get("success"):
-        print("\n  \033[38;5;196m✗ Failed to send attach command\033[0m")
-        print(f"  Error: {result.get('error', 'Unknown')}")
-        input("\n  Press Enter to continue...")
-        return
-    
-    data = result.get("data", {})
-    method = data.get("method", "Unknown")
-    print(f"  \033[38;5;141m✓ Teleport initiated!\033[0m")
-    print(f"  \033[38;5;93m→ Method: {method}\033[0m")
-    
-    if "manual" in method.lower():
-        print(f"\n  \033[38;5;93m⚠️  Manual join required!\033[0m")
-        print(f"  \033[38;5;93m→ {data.get('note', 'Check game for instructions')}\033[0m")
-        input("\n  Press Enter to continue...")
-        return
-    
-    success, game_info = wait_for_agent_reconnect(private_agent_id, place_id_int, max_wait=45)
-    
-    if success and game_info:
-        last_known_place_id = place_id_int
-        print(f"\n  \033[38;5;141m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m")
-        print(f"  \033[38;5;141m✓ AGENT SUCCESSFULLY ATTACHED!\033[0m")
-        print(f"  \033[38;5;141m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n")
-        print(f"  \033[38;5;135m📍 Game Name:\033[0m {game_info.get('name', 'Unknown')}")
-        print(f"  \033[38;5;135m📍 Place ID:\033[0m {place_id}")
-        print(f"  \033[38;5;135m👥 Players:\033[0m {game_info.get('players', 'Unknown')}")
-        print(f"  \033[38;5;135m🛡️  Anti-AFK:\033[0m Active")
-        if auto_script:
-            print(f"  \033[38;5;135m📜 Auto-Script:\033[0m Executed")
-        print()
-    else:
-        print(f"\n  \033[38;5;93m⚠️  Could not verify connection\033[0m")
-        print(f"  \033[38;5;93m→ Agent may still be loading or in a different game\033[0m")
-        print(f"  \033[38;5;93m→ Use 'agentstatus' command to check manually\033[0m")
-    
-    input("\n  Press Enter to continue...")
-
-def cmd_agent_status():
-    """Check agent status and control"""
-    global private_agent_id
-    
-    if not private_agent_id:
-        clear()
-        banner()
-        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
-        print("  \033[38;5;93m→ Run 'agent' command first\033[0m\n")
-        input("\n  Press Enter to continue...")
-        return
-    
-    clear()
-    banner()
-    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
-    print("\033[38;5;141m║            AGENT STATUS & CONTROL             ║\033[0m")
-    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
-    print(f"  \033[38;5;135m→ Fetching agent status...\033[0m\n")
-    
-    status = get_agent_status(private_agent_id)
-    
-    if not status:
-        print("  \033[38;5;196m✗ Could not fetch agent status\033[0m")
-        input("\n  Press Enter to continue...")
-        return
-    
-    print(f"  \033[38;5;141m✓ Agent ID:\033[0m {private_agent_id}")
-    print(f"  \033[38;5;141m✓ Status:\033[0m {status.get('status', 'Unknown')}")
-    print(f"  \033[38;5;141m✓ Uptime:\033[0m {status.get('uptime', 0)} minutes")
-    
-    if status.get('current_game'):
-        game = status['current_game']
-        print(f"\n  \033[38;5;135m📍 Current Game:\033[0m")
-        print(f"     Name: {game.get('name', 'Unknown')}")
-        print(f"     Place ID: {game.get('place_id', 'Unknown')}")
-        print(f"     Players: {game.get('players', 'Unknown')}")
-        print(f"     Time in game: {game.get('time_in_game', 0)} minutes")
-    else:
-        print(f"\n  \033[38;5;93m→ Not currently in a game\033[0m")
-    
-    if status.get('anti_afk_active'):
-        print(f"\n  \033[38;5;141m✓ Anti-AFK:\033[0m Active")
-    
-    print("\n  \033[38;5;93m" + "─"*45 + "\033[0m\n")
-    print("  \033[38;5;93m[1]\033[0m Leave Current Game")
-    print("  \033[38;5;93m[2]\033[0m Execute Script on Agent")
-    print("  \033[38;5;93m[3]\033[0m Get Game Data")
-    print("  \033[38;5;93m[4]\033[0m Back\n")
-    
-    choice = input("  Select → ").strip()
-    
-    if choice == "1":
-        print(f"\n  \033[38;5;135m→ Instructing agent to leave game...\033[0m")
-        result = send_agent_command(private_agent_id, "agent_leave_game")
-        if result.get("success"):
-            print("  \033[38;5;141m✓ Agent left the game\033[0m")
-        else:
-            print("  \033[38;5;196m✗ Failed to leave game\033[0m")
-        time.sleep(1.5)
-    
-    elif choice == "2":
-        print("\n  \033[38;5;135m→ Enter script URL or Lua code\033[0m\n")
-        script = input("  Script → ").strip()
-        if script:
-            print(f"\n  \033[38;5
