@@ -926,10 +926,61 @@ def cmd_exe():
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
     
     print(f"  \033[38;5;93m→ Connected to: {target_id} {'(Agent)' if use_agent else ''}\033[0m")
-    print("\033[38;5;135m  → Enter script URL or paste Lua code\033[0m")
-    print("\033[38;5;93m  → Type 'cancel' to go back\033[0m\n")
+    print("\033[38;5;135m  → Options:\033[0m")
+    print("  \033[38;5;93m[1]\033[0m Enter URL")
+    print("  \033[38;5;93m[2]\033[0m Paste Multi-line Script")
+    print("  \033[38;5;93m[3]\033[0m Load from File")
+    print("  \033[38;5;93m[4]\033[0m Cancel\n")
     
-    script = input("  Script → ").strip()
+    choice = input("  Select → ").strip()
+    
+    script = None
+    
+    if choice == "1":
+        print("\n  \033[38;5;135m→ Enter script URL:\033[0m")
+        script = input("  URL → ").strip()
+    
+    elif choice == "2":
+        print("\n  \033[38;5;135m→ Paste your script below\033[0m")
+        print("  \033[38;5;93m→ Type 'END' on a new line when done\033[0m")
+        print("  \033[38;5;93m→ Or press Ctrl+D (Unix) / Ctrl+Z (Windows)\033[0m\n")
+        
+        lines = []
+        try:
+            while True:
+                line = input()
+                if line.strip() == "END":
+                    break
+                lines.append(line)
+        except EOFError:
+            pass
+        
+        script = '\n'.join(lines)
+    
+    elif choice == "3":
+        print("\n  \033[38;5;135m→ Enter file path:\033[0m")
+        filepath = input("  Path → ").strip()
+        
+        try:
+            with open(filepath, 'r') as f:
+                script = f.read()
+            print(f"  \033[38;5;141m✓ Loaded {len(script)} characters from file\033[0m")
+        except FileNotFoundError:
+            print(f"  \033[38;5;196m✗ File not found: {filepath}\033[0m")
+            input("\n  Press Enter to continue...")
+            return
+        except Exception as e:
+            print(f"  \033[38;5;196m✗ Error reading file: {e}\033[0m")
+            input("\n  Press Enter to continue...")
+            return
+    
+    elif choice == "4":
+        return
+    
+    else:
+        print("\n  \033[38;5;196m✗ Invalid option\033[0m")
+        time.sleep(1)
+        return
     
     if not script or script.lower() == "cancel":
         return
@@ -940,7 +991,7 @@ def cmd_exe():
     print("\033[38;5;141m║            SCRIPT EXECUTOR                    ║\033[0m")
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
     
-    print(f"  \033[38;5;135m→ Executing script...\033[0m\n")
+    print(f"  \033[38;5;135m→ Executing script ({len(script)} chars)...\033[0m\n")
     
     if use_agent:
         result = send_agent_command(target_id, "exe", {"script": script})
