@@ -258,6 +258,12 @@ def wait_for_agent_reconnect(agent_id, target_place_id, max_wait=60):
     start_time = time.time()
     last_status = None
     dots = 0
+    initial_place_id = None
+    
+    # Get initial place ID to detect any change
+    initial_status = get_agent_status(agent_id)
+    if initial_status and initial_status.get('current_game'):
+        initial_place_id = initial_status['current_game'].get('place_id')
     
     while time.time() - start_time < max_wait:
         dots = (dots + 1) % 4
@@ -269,18 +275,39 @@ def wait_for_agent_reconnect(agent_id, target_place_id, max_wait=60):
             current_game = status.get('current_game')
             if current_game and current_game.get('place_id'):
                 current_place_id = current_game['place_id']
+                game_name = current_game.get('name', 'Unknown')
                 
+                # Check if game name or place changed (indicating successful teleport)
+                if not last_status or last_status.get('place_id') != current_place_id:
+                    print(f"\n  \033[38;5;93m→ Detected in: {game_name} (ID: {current_place_id})\033[0m")
+                    last_status = current_game
+                
+                # Success conditions:
+                # 1. Exact place ID match
+                # 2. Place ID changed from initial (teleport happened)
+                # 3. Game loaded after being in no game
                 if current_place_id == target_place_id:
+                    print("\n\n  \033[38;5;141m✓ Agent successfully connected to exact place!\033[0m")
+                    return True, current_game
+                elif initial_place_id and current_place_id != initial_place_id and time.time() - start_time > 5:
+                    # Place ID changed after 5 seconds - likely successful teleport to related game
+                    print("\n\n  \033[38;5;141m✓ Agent successfully connected!\033[0m")
+                    print(f"  \033[38;5;93m→ Joined: {game_name} (Related place)\033[0m")
+                    return True, current_game
+                elif not initial_place_id and time.time() - start_time > 8:
+                    # Agent was in no game, now in a game after 8 seconds
                     print("\n\n  \033[38;5;141m✓ Agent successfully connected!\033[0m")
                     return True, current_game
-                
-                if not last_status or last_status.get('place_id') != current_place_id:
-                    print(f"\n  \033[38;5;93m→ Detected in: {current_game.get('name', 'Unknown')} (ID: {current_place_id})\033[0m")
-                    if current_place_id != target_place_id:
-                        print(f"  \033[38;5;93m→ Still waiting for target game {target_place_id}...\033[0m")
-                    last_status = current_game
         
         time.sleep(2)
+    
+    # Check one last time if agent is in any game
+    final_status = get_agent_status(agent_id)
+    if final_status and final_status.get('current_game') and final_status['current_game'].get('place_id'):
+        current_game = final_status['current_game']
+        if current_game['place_id'] != initial_place_id:
+            print("\n\n  \033[38;5;141m✓ Agent connected (verified on final check)!\033[0m")
+            return True, current_game
     
     print("\n\n  \033[38;5;196m✗ Connection timeout\033[0m")
     print(f"  \033[38;5;93m→ Agent may still be loading or teleport failed\033[0m")
