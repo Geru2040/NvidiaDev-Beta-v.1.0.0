@@ -254,17 +254,34 @@ def cmd_agent_list():
     
     print("  \033[38;5;93m" + "─"*45 + "\033[0m\n")
     
+    # Fetch all agent statuses first
+    agent_statuses = {}
+    for agent in agents:
+        agent_id = agent['id']
+        status = get_agent_status(agent_id)
+        agent_statuses[agent_id] = status
+    
+    # Display agents with status
     for i, agent in enumerate(agents, 1):
         agent_id = agent['id']
-        added_on = datetime.fromisoformat(agent['added_on']).strftime("%Y-%m-%d %H:%M")
-        last_used = datetime.fromisoformat(agent['last_used']).strftime("%Y-%m-%d %H:%M")
         
+        # Safe datetime parsing
+        try:
+            added_on = datetime.fromisoformat(agent['added_on']).strftime("%Y-%m-%d %H:%M")
+        except:
+            added_on = agent.get('added_on', 'Unknown')
+        
+        try:
+            last_used = datetime.fromisoformat(agent['last_used']).strftime("%Y-%m-%d %H:%M")
+        except:
+            last_used = agent.get('last_used', 'Unknown')
+        
+        status = agent_statuses.get(agent_id)
+        
+        # Display agent info
         print(f"  \033[38;5;141m[{i}] Agent ID:\033[0m {agent_id}")
         print(f"      \033[38;5;93mAdded:\033[0m {added_on}")
         print(f"      \033[38;5;93mLast Used:\033[0m {last_used}")
-        
-        # Check if agent is online
-        status = get_agent_status(agent_id)
         
         if status:
             print(f"      \033[38;5;141m✓ Status: ONLINE\033[0m")
@@ -280,48 +297,66 @@ def cmd_agent_list():
         print()
     
     print("  \033[38;5;93m" + "─"*45 + "\033[0m\n")
-    print("  \033[38;5;93m[1]\033[0m Connect to Agent")
-    print("  \033[38;5;93m[2]\033[0m Remove Agent")
-    print("  \033[38;5;93m[3]\033[0m Back\n")
+    print("  \033[38;5;93mType agent number to connect (e.g., '1')\033[0m")
+    print("  \033[38;5;93mType 'remove <number>' to delete (e.g., 'remove 2')\033[0m")
+    print("  \033[38;5;93mType 'back' to return\033[0m\n")
     
-    choice = input("  Select → ").strip()
+    choice = input("  → ").strip().lower()
     
-    if choice == "1":
-        agent_num = input("\n  Agent number to connect → ").strip()
+    if choice == "back" or choice == "":
+        return
+    
+    # Handle remove command
+    if choice.startswith("remove "):
         try:
-            idx = int(agent_num) - 1
-            if 0 <= idx < len(agents):
-                global private_agent_id
-                private_agent_id = agents[idx]['id']
-                
-                # Update last_used
-                agents[idx]['last_used'] = datetime.now().isoformat()
-                save_agents(agents)
-                
-                print(f"\n  \033[38;5;141m✓ Connected to agent {private_agent_id}\033[0m")
-                time.sleep(1.5)
-            else:
-                print("\n  \033[38;5;196m✗ Invalid agent number\033[0m")
-                time.sleep(1.5)
-        except ValueError:
-            print("\n  \033[38;5;196m✗ Invalid input\033[0m")
-            time.sleep(1.5)
-    
-    elif choice == "2":
-        agent_num = input("\n  Agent number to remove → ").strip()
-        try:
-            idx = int(agent_num) - 1
+            agent_num = int(choice.split()[1])
+            idx = agent_num - 1
+            
             if 0 <= idx < len(agents):
                 removed_id = agents[idx]['id']
                 remove_agent_from_storage(removed_id)
                 print(f"\n  \033[38;5;141m✓ Removed agent {removed_id}\033[0m")
-                time.sleep(1.5)
             else:
                 print("\n  \033[38;5;196m✗ Invalid agent number\033[0m")
-                time.sleep(1.5)
-        except ValueError:
-            print("\n  \033[38;5;196m✗ Invalid input\033[0m")
+            
             time.sleep(1.5)
+            return cmd_agent_list()  # Refresh the list
+        except (ValueError, IndexError):
+            print("\n  \033[38;5;196m✗ Invalid format. Use: remove <number>\033[0m")
+            time.sleep(1.5)
+            return cmd_agent_list()
+    
+    # Handle connect to agent
+    try:
+        agent_num = int(choice)
+        idx = agent_num - 1
+        
+        if 0 <= idx < len(agents):
+            global private_agent_id
+            private_agent_id = agents[idx]['id']
+            
+            # Update last_used with current timestamp
+            agents[idx]['last_used'] = datetime.now().isoformat()
+            save_agents(agents)
+            
+            print(f"\n  \033[38;5;141m✓ Connected to agent {private_agent_id}\033[0m")
+            
+            # Show agent status
+            status = agent_statuses.get(private_agent_id)
+            if status:
+                if status.get('current_game'):
+                    game = status['current_game']
+                    print(f"  \033[38;5;135m→ Currently in: {game.get('name', 'Unknown')}\033[0m")
+            
+            time.sleep(2)
+        else:
+            print("\n  \033[38;5;196m✗ Invalid agent number\033[0m")
+            time.sleep(1.5)
+            return cmd_agent_list()
+    except ValueError:
+        print("\n  \033[38;5;196m✗ Invalid input. Enter a number or 'remove <number>'\033[0m")
+        time.sleep(1.5)
+        return cmd_agent_list()
 
 def cmd_agent():
     """Private Agent management"""
