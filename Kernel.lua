@@ -178,9 +178,18 @@ local function captureScreenshot()
     return true
 end
 
--- Agent command handlers
+-- Global Command Handler Table
+local CommandHandlers = {}
 local AgentCommands = {}
 
+-- Map all AgentCommands to CommandHandlers for better compatibility
+local function mapCommands()
+    for name, func in pairs(AgentCommands) do
+        CommandHandlers[name] = func
+    end
+end
+
+-- Agent command handlers
 AgentCommands.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
@@ -1219,14 +1228,7 @@ local function executeCommand(cmd)
 
     print("⚡ Executing command: " .. commandName)
 
-    local handler = nil
-
-    if commandName:match("^agent_") then
-        handler = AgentCommands[commandName]
-    else
-        handler = CommandHandlers[commandName]
-    end
-
+    local handler = CommandHandlers[commandName] or AgentCommands[commandName]
     if handler then
         local success, result = pcall(function()
             return handler(args)
@@ -1278,4 +1280,5 @@ local function startCommandListener()
 end
 
 -- Start the listener
+mapCommands()
 startCommandListener()
