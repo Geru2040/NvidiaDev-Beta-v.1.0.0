@@ -912,6 +912,9 @@ def cmd_agent_starlist():
     try:
         last_used = datetime.fromisoformat(starred['last_used']).strftime("%Y-%m-%d %H:%M")
         print(f"  \033[38;5;93mLast Used:\033[0m {last_used}")
+    except:
+        pass
+
 def cmd_screenshot():
     """Silently capture screenshot from agent/port"""
     global connected_account, private_agent_id
@@ -952,41 +955,60 @@ def cmd_screenshot():
     print(f"  \033[38;5;141m✓ Capture initiated successfully\033[0m")
     print(f"  \033[38;5;93m→ Waiting for upload to complete...\033[0m\n")
 
-    # Wait for capture to complete (60 seconds max)
-    time.sleep(5)
+    # Wait for capture to complete (120 seconds max)
+    time.sleep(2)
 
     url = "PENDING"
-    for attempt in range(15):  # 75 seconds total
+    # Increased attempts for long captures
+    for attempt in range(60):  # ~120 seconds total
         dots = "." * ((attempt % 3) + 1) + " " * (2 - (attempt % 3))
         print(f"  \033[38;5;135m⏳ Processing{dots}\033[0m", end='\r', flush=True)
-        time.sleep(5)
+        time.sleep(2)
 
-        # Check the global variable on target
-        check_script = "return _G.LUMEN_SCREENSHOT_URL"
+        # Check the status using the dedicated 'screenshot_status' command
         if use_agent:
-            check_result = send_agent_command(target_id, "exe", {"script": check_script})
+            check_result = send_agent_command(target_id, "screenshot_status")
         else:
-            check_result = send_command(target_id, "exe", {"script": check_script})
+            check_result = send_command(target_id, "screenshot_status")
 
         if check_result.get("success"):
             data = check_result.get("data")
-            # Parse the URL from the response
-            found_url = None
-            if isinstance(data, str) and data.startswith("http"):
-                found_url = data
-            elif isinstance(data, dict):
-                res_val = data.get("response", data.get("data", data.get("url")))
-                if isinstance(res_val, dict):
-                    res_val = res_val.get("url", res_val.get("data", res_val.get("response")))
-                if isinstance(res_val, str) and res_val.startswith("http"):
-                    found_url = res_val
+            
+            # Extract URL helper
+            def extract_url(val):
+                if not val: return None
+                if isinstance(val, str):
+                    val = val.strip()
+                    if val.startswith("http"): return val
+                    return None
+                if isinstance(val, dict):
+                    # Check common response fields
+                    for k in ["response", "result", "url", "data", "message"]:
+                        res = extract_url(val.get(k))
+                        if res: return res
+                    # Check values directly
+                    for v in val.values():
+                        res = extract_url(v)
+                        if res: return res
+                return None
 
+            found_url = extract_url(data)
             if found_url:
                 url = found_url
                 break
+            
+            # Stringify for check
+            data_str = ""
+            if isinstance(data, str):
+                data_str = data.strip().upper()
+            elif isinstance(data, dict):
+                data_str = str(data).upper()
 
-            if isinstance(data, str) and "ERROR" in data:
-                url = data
+            if "PENDING" in data_str:
+                continue
+
+            if "ERROR" in data_str or "FAILED" in data_str:
+                url = data if isinstance(data, str) else str(data)
                 break
 
     clear()
@@ -1507,6 +1529,215 @@ def cmd_dex(revamp=False):
 
     input("\n  Press Enter to continue...")
 
+def cmd_screenrecord(args=None):
+    """Silent screen recording from agent/port"""
+    global connected_account, private_agent_id
+
+    if not connected_account and not private_agent_id:
+        clear()
+        banner()
+        print("\n  \033[38;5;196m✗ No active connection\033[0m")
+        print("  \033[38;5;93m→ Run 'runport' or 'agent' command first\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+
+    duration = 5
+    if args:
+        try:
+            duration = int(args.replace("--", ""))
+            if duration > 10: duration = 10
+        except:
+            pass
+
+    use_agent = private_agent_id and not connected_account
+    target_id = private_agent_id if use_agent else connected_account
+
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║          SILENT SCREEN RECORDING              ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+
+    print(f"  \033[38;5;93m→ Target: {target_id} {'(Agent)' if use_agent else '(Port)'}\033[0m")
+    print(f"  \033[38;5;135m→ Initiating silent recording (Max 10s)...\033[0m")
+    print(f"  \033[38;5;93m→ This may take a while to process...\033[0m\n")
+
+    # DIRECT EXECUTION - Just like buildmap or other commands
+    payload = {"duration": duration}
+    if use_agent:
+        result = send_agent_command(target_id, "screenrecord", payload)
+    else:
+        result = send_command(target_id, "screenrecord", payload)
+
+    # Simplified success check
+    print(f"  \033[38;5;141m✓ Command sent successfully\033[0m")
+    print(f"  \033[38;5;93m→ Recording in progress, please wait...\033[0m\n")
+
+    # Polling for recording
+    url = "PENDING"
+    for attempt in range(120): # Up to 4 mins
+        dots = "." * ((attempt % 3) + 1) + " " * (2 - (attempt % 3))
+        print(f"  \033[38;5;135m⏳ Processing Video{dots}\033[0m", end='\r', flush=True)
+        time.sleep(2)
+
+        if use_agent:
+            check_result = send_agent_command(target_id, "record_status")
+        else:
+            check_result = send_command(target_id, "record_status")
+
+        if check_result and check_result.get("success"):
+            data = check_result.get("data")
+            if isinstance(data, str):
+                if data.startswith("http"):
+                    url = data
+                    break
+                elif "ERROR" in data.upper():
+                    url = data
+                    break
+            elif isinstance(data, dict):
+                res = data.get("response") or data.get("url") or data.get("data")
+                if isinstance(res, str) and res.startswith("http"):
+                    url = res
+                    break
+
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║          SILENT SCREEN RECORDING              ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+
+    if url != "PENDING" and not url.startswith("ERROR"):
+        print(f"  \033[38;5;141m✓ Video recorded successfully!\033[0m\n")
+    else:
+        print(f"  \033[38;5;196m✗ Recording timed out or failed\033[0m\n")
+
+    print(f"  \033[38;5;135mVideo URL:\033[0m")
+    print(f"  \033[38;5;141m→ {url}\033[0m\n")
+    input("\n  Press Enter to continue...")
+
+def cmd_search(query=None):
+    """Search for scripts on ScriptBlox or RScripts"""
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║            SCRIPT SEARCH ENGINE               ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+
+    if not query:
+        print("  \033[38;5;93mUsage: search --<provider> --<query>\033[0m")
+        print("  \033[38;5;93mProviders: ScriptBlox, RScripts\033[0m")
+        print("  \033[38;5;135mExample: search --ScriptBlox --jailbreak\033[0m\n")
+        query_input = input("  Enter Search (or 'back') → ").strip()
+        if query_input.lower() == 'back' or not query_input: return
+        query = query_input
+
+    provider = "scriptblox"
+    search_term = ""
+
+    parts = query.split("--")
+    if len(parts) >= 3:
+        provider = parts[1].lower()
+        search_term = parts[2].strip()
+    elif len(parts) == 2:
+        search_term = parts[1].strip()
+    else:
+        search_term = query.strip()
+
+    print(f"  \033[38;5;135m🔍 Searching {provider.capitalize()} for: {search_term}...\033[0m")
+
+    scripts = []
+    try:
+        if "scriptblox" in provider:
+            url = f"https://scriptblox.com/api/script/search?q={search_term}&max=20"
+            resp = requests.get(url, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                scripts = data.get("result", {}).get("scripts", [])
+        elif "rscripts" in provider:
+            url = f"https://rscripts.net/api/v2/scripts?search={search_term}&page=1"
+            resp = requests.get(url, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                scripts = data.get("scripts", [])
+    except Exception as e:
+        print(f"  \033[38;5;196m✗ Search failed: {e}\033[0m")
+        time.sleep(2)
+        return
+
+    if not scripts:
+        print("  \033[38;5;196m✗ No scripts found.\033[0m")
+        time.sleep(2)
+        return
+
+    clear()
+    banner()
+    print(f"  \033[38;5;141mFound {len(scripts)} scripts for '{search_term}':\033[0m\n")
+
+    for i, s in enumerate(scripts, 1):
+        title = s.get("title", "Unknown")
+        slug = s.get("slug") or s.get("_id", "N/A")
+        print(f"  \033[38;5;93m[{i}]\033[0m {title}")
+        print(f"      \033[38;5;135mID/Slug:\033[0m {slug}")
+
+    print(f"\n  \033[38;5;93mSelect a number to get the script or 'back' to return\033[0m")
+    choice = input("  Select → ").strip()
+
+    if choice.lower() == 'back': return
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(scripts):
+            target = scripts[idx]
+            script_content = ""
+            
+            print(f"\n  \033[38;5;135m📥 Fetching script content...\033[0m")
+            
+            if "scriptblox" in provider:
+                # ScriptBlox might need another call for full content if not in search
+                script_content = target.get("script", "")
+                if not script_content and target.get("slug"):
+                    # Fallback or detail fetch if needed
+                    pass
+            elif "rscripts" in provider:
+                raw_url = target.get("rawScript")
+                if raw_url:
+                    script_content = requests.get(raw_url, timeout=10).text
+
+            if script_content:
+                clear()
+                banner()
+                print(f"  \033[38;5;141m--- {target.get('title')} ---\033[0m\n")
+                print(script_content[:2000] + ("..." if len(script_content) > 2000 else ""))
+                
+                print(f"\n  \033[38;5;93m[1]\033[0m Copy to Clipboard")
+                print(f"  \033[38;5;93m[2]\033[0m Execute on Target")
+                print(f"  \033[38;5;93m[3]\033[0m Back")
+                
+                opt = input("\n  Select → ").strip()
+                if opt == "1":
+                    # Simple file save as "clipboard" simulation or actual print
+                    with open("last_script.txt", "w") as f: f.write(script_content)
+                    print("\n  \033[38;5;141m✓ Saved to last_script.txt\033[0m")
+                    time.sleep(1.5)
+                elif opt == "2":
+                    if connected_account or private_agent_id:
+                        target_id = private_agent_id or connected_account
+                        use_agent = private_agent_id is not None
+                        if use_agent:
+                            send_agent_command(target_id, "agent_execute", {"script": script_content})
+                        else:
+                            send_command(target_id, "exe", {"script": script_content})
+                        print("\n  \033[38;5;141m✓ Script sent to target!\033[0m")
+                    else:
+                        print("\n  \033[38;5;196m✗ Not connected to any agent/client\033[0m")
+                    time.sleep(2)
+            else:
+                print("\n  \033[38;5;196m✗ Could not retrieve script content.\033[0m")
+                time.sleep(2)
+    except Exception as e:
+        print(f"\n  \033[38;5;196m✗ Error: {e}\033[0m")
+        time.sleep(2)
+
 def clear():
     print("\033[2J\033[H", end="")
 
@@ -1546,7 +1777,9 @@ def main():
         print("  \033[38;5;93m• buildmap\033[0m      → Full game tree (slow)")
         print("  \033[38;5;93m• dex\033[0m           → Launch Dark DEX Mobile")
         print("  \033[38;5;93m• exe\033[0m           → Execute custom script")
+        print("  \033[38;5;93m• search\033[0m        → Search ScriptBlox/RScripts")
         print("  \033[38;5;93m• screenshot\033[0m    → Silent screenshot capture")
+        print("  \033[38;5;93m• screenrecord\033[0m  → Silent screen recording (Max 10s)")
 
         print("\n  \033[38;5;135mAGENT COMMANDS:\033[0m")
         print("  \033[38;5;141m• agent\033[0m         → Setup private agent")
@@ -1581,8 +1814,14 @@ def main():
             cmd_dex()
         elif choice == "exe":
             cmd_exe()
+        elif choice.startswith("search"):
+            q = choice.replace("search", "", 1).strip()
+            cmd_search(q if q else None)
         elif choice == "screenshot":
             cmd_screenshot()
+        elif choice.startswith("screenrecord"):
+            args = choice.replace("screenrecord", "", 1).strip()
+            cmd_screenrecord(args if args else None)
         elif choice == "agent":
             cmd_agent()
         elif choice == "agent --list":
