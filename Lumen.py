@@ -108,17 +108,17 @@ def star_agent(agent_identifier):
 
     # Find the target agent
     target_agent = None
-    for agent in agents:
-        if agent['id'] == agent_identifier or (agent.get('name') and agent['name'].lower() == agent_identifier.lower()):
-            target_agent = agent
+    for agent_entry in agents:
+        if agent_entry['id'] == agent_identifier or (agent_entry.get('name') and agent_entry['name'].lower() == agent_identifier.lower()):
+            target_agent = agent_entry
             break
 
-    if not target_agent:
+    if target_agent is None:
         return False, "Agent not found"
-
+        
     # Unstar all other agents
-    for agent in agents:
-        agent['starred'] = False
+    for a in agents:
+        a['starred'] = False
 
     # Star the target
     target_agent['starred'] = True
@@ -920,6 +920,8 @@ def cmd_screenrecord(args=None):
     global private_agent_id
     
     if not private_agent_id:
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        time.sleep(1.5)
         return
         
     duration = 5
@@ -932,21 +934,37 @@ def cmd_screenrecord(args=None):
                     pass
 
     # Start recording
-    result = send_agent_command(private_agent_id, "screenrecord", {"duration": duration})
-    if not result.get("success"):
+    # Use agent_ prefix for agent commands to match handler logic in agent.lua
+    result = send_agent_command(private_agent_id, "agent_screenrecord", {"duration": duration})
+    if not result or not result.get("success"):
+        error_msg = result.get("error") if result else "No response"
+        print(f"\n  \033[38;5;196m✗ Failed to start recording: {error_msg}\033[0m")
+        time.sleep(2)
         return
 
+    print(f"\n  \033[38;5;135m🎬 Recording in progress ({duration}s)...\033[0m")
+    
     # Poll status
     max_attempts = 120 # Long timeout for recording + upload
     for _ in range(max_attempts):
         time.sleep(1)
-        status_result = send_agent_command(private_agent_id, "screenrecord_status")
-        if status_result.get("success"):
+        status_result = send_agent_command(private_agent_id, "agent_screenrecord_status")
+        if status_result and status_result.get("success"):
             video_url = status_result.get("data")
             if video_url and video_url != "PENDING":
                 if "ERROR" not in video_url:
                     print(f"\n  \033[38;5;141m✓ Video:\033[0m {video_url}")
+                    input("\n  Press Enter to continue...")
+                else:
+                    print(f"\n  \033[38;5;196m✗ Recording failed: {video_url}\033[0m")
+                    time.sleep(2)
                 break
+        else:
+            # Silent failure or keep polling
+            pass
+    else:
+        print(f"\n  \033[38;5;196m✗ Recording timed out\033[0m")
+        time.sleep(2)
 
 def cmd_screenshot():
     """Silently capture screenshot from agent/port"""
