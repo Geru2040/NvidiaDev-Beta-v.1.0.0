@@ -194,9 +194,9 @@ end
 AgentCommands.screenrecord = function(args)
     local duration = tonumber(args and args.duration) or 5
     if duration > 10 then duration = 10 end
-    
+
     _G.LUMEN_RECORD_URL = "PENDING"
-    
+
     spawn(function()
         local FPS = 10
         local DURATION = duration
@@ -289,7 +289,7 @@ AgentCommands.screenrecord = function(args)
         local targetInterval = 1 / FPS
         local lastFrameTime = 0
         local connection
-        
+
         connection = RunService.RenderStepped:Connect(function()
             if frameCount >= TOTAL_FRAMES then
                 connection:Disconnect()
