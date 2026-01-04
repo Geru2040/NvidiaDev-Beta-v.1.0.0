@@ -244,7 +244,6 @@ AgentCommands.screenrecord = function(args)
         local function captureFrameInstant()
             local pixels = table.create(RESOLUTION.width * RESOLUTION.height * 3)
             local idx = 1
-            local camCF = camera.CFrame
             for y = 0, RESOLUTION.height - 1 do
                 local rowPoints = viewportPoints[y]
                 for x = 0, RESOLUTION.width - 1 do
@@ -312,7 +311,8 @@ AgentCommands.screenrecord = function(args)
 
         local payload = { agent_id = AGENT_ID, place_id = game.PlaceId, fps = FPS, duration = DURATION, resolution = RESOLUTION.width .. "x" .. RESOLUTION.height, frames = frames }
         local success, result = pcall(function()
-            return request({
+            local req_func = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+            return req_func({
                 Url = API_URL,
                 Method = "POST",
                 Headers = { ["Content-Type"] = "application/json" },
