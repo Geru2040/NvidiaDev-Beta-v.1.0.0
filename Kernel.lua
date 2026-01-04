@@ -733,8 +733,6 @@ AgentCommands.agent_disconnect = function(args)
 end
 
 -- Regular command handlers
-local CommandHandlers = {}
-
 CommandHandlers.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
