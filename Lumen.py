@@ -1529,6 +1529,129 @@ def cmd_dex(revamp=False):
 
     input("\n  Press Enter to continue...")
 
+def cmd_search(query=None):
+    """Search for scripts on ScriptBlox or RScripts"""
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║            SCRIPT SEARCH ENGINE               ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+
+    if not query:
+        print("  \033[38;5;93mUsage: search --<provider> --<query>\033[0m")
+        print("  \033[38;5;93mProviders: ScriptBlox, RScripts\033[0m")
+        print("  \033[38;5;135mExample: search --ScriptBlox --jailbreak\033[0m\n")
+        query_input = input("  Enter Search (or 'back') → ").strip()
+        if query_input.lower() == 'back' or not query_input: return
+        query = query_input
+
+    provider = "scriptblox"
+    search_term = ""
+
+    parts = query.split("--")
+    if len(parts) >= 3:
+        provider = parts[1].lower()
+        search_term = parts[2].strip()
+    elif len(parts) == 2:
+        search_term = parts[1].strip()
+    else:
+        search_term = query.strip()
+
+    print(f"  \033[38;5;135m🔍 Searching {provider.capitalize()} for: {search_term}...\033[0m")
+
+    scripts = []
+    try:
+        if "scriptblox" in provider:
+            url = f"https://scriptblox.com/api/script/search?q={search_term}&max=20"
+            resp = requests.get(url, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                scripts = data.get("result", {}).get("scripts", [])
+        elif "rscripts" in provider:
+            url = f"https://rscripts.net/api/v2/scripts?search={search_term}&page=1"
+            resp = requests.get(url, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                scripts = data.get("scripts", [])
+    except Exception as e:
+        print(f"  \033[38;5;196m✗ Search failed: {e}\033[0m")
+        time.sleep(2)
+        return
+
+    if not scripts:
+        print("  \033[38;5;196m✗ No scripts found.\033[0m")
+        time.sleep(2)
+        return
+
+    clear()
+    banner()
+    print(f"  \033[38;5;141mFound {len(scripts)} scripts for '{search_term}':\033[0m\n")
+
+    for i, s in enumerate(scripts, 1):
+        title = s.get("title", "Unknown")
+        slug = s.get("slug") or s.get("_id", "N/A")
+        print(f"  \033[38;5;93m[{i}]\033[0m {title}")
+        print(f"      \033[38;5;135mID/Slug:\033[0m {slug}")
+
+    print(f"\n  \033[38;5;93mSelect a number to get the script or 'back' to return\033[0m")
+    choice = input("  Select → ").strip()
+
+    if choice.lower() == 'back': return
+
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(scripts):
+            target = scripts[idx]
+            script_content = ""
+            
+            print(f"\n  \033[38;5;135m📥 Fetching script content...\033[0m")
+            
+            if "scriptblox" in provider:
+                # ScriptBlox might need another call for full content if not in search
+                script_content = target.get("script", "")
+                if not script_content and target.get("slug"):
+                    # Fallback or detail fetch if needed
+                    pass
+            elif "rscripts" in provider:
+                raw_url = target.get("rawScript")
+                if raw_url:
+                    script_content = requests.get(raw_url, timeout=10).text
+
+            if script_content:
+                clear()
+                banner()
+                print(f"  \033[38;5;141m--- {target.get('title')} ---\033[0m\n")
+                print(script_content[:2000] + ("..." if len(script_content) > 2000 else ""))
+                
+                print(f"\n  \033[38;5;93m[1]\033[0m Copy to Clipboard")
+                print(f"  \033[38;5;93m[2]\033[0m Execute on Target")
+                print(f"  \033[38;5;93m[3]\033[0m Back")
+                
+                opt = input("\n  Select → ").strip()
+                if opt == "1":
+                    # Simple file save as "clipboard" simulation or actual print
+                    with open("last_script.txt", "w") as f: f.write(script_content)
+                    print("\n  \033[38;5;141m✓ Saved to last_script.txt\033[0m")
+                    time.sleep(1.5)
+                elif opt == "2":
+                    if connected_account or private_agent_id:
+                        target_id = private_agent_id or connected_account
+                        use_agent = private_agent_id is not None
+                        if use_agent:
+                            send_agent_command(target_id, "agent_execute", {"script": script_content})
+                        else:
+                            send_command(target_id, "exe", {"script": script_content})
+                        print("\n  \033[38;5;141m✓ Script sent to target!\033[0m")
+                    else:
+                        print("\n  \033[38;5;196m✗ Not connected to any agent/client\033[0m")
+                    time.sleep(2)
+            else:
+                print("\n  \033[38;5;196m✗ Could not retrieve script content.\033[0m")
+                time.sleep(2)
+    except Exception as e:
+        print(f"\n  \033[38;5;196m✗ Error: {e}\033[0m")
+        time.sleep(2)
+
 def clear():
     print("\033[2J\033[H", end="")
 
@@ -1568,6 +1691,7 @@ def main():
         print("  \033[38;5;93m• buildmap\033[0m      → Full game tree (slow)")
         print("  \033[38;5;93m• dex\033[0m           → Launch Dark DEX Mobile")
         print("  \033[38;5;93m• exe\033[0m           → Execute custom script")
+        print("  \033[38;5;93m• search\033[0m        → Search ScriptBlox/RScripts")
         print("  \033[38;5;93m• screenshot\033[0m    → Silent screenshot capture")
 
         print("\n  \033[38;5;135mAGENT COMMANDS:\033[0m")
@@ -1603,6 +1727,9 @@ def main():
             cmd_dex()
         elif choice == "exe":
             cmd_exe()
+        elif choice.startswith("search"):
+            q = choice.replace("search", "", 1).strip()
+            cmd_search(q if q else None)
         elif choice == "screenshot":
             cmd_screenshot()
         elif choice == "agent":
