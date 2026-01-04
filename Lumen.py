@@ -116,10 +116,6 @@ def star_agent(agent_identifier):
     if target_agent is None:
         return False, "Agent not found"
 
-    # Unstar all other agents
-    for a in agents:
-        a['starred'] = False
-
     # Star the target
     target_agent['starred'] = True
     save_agents(agents)
@@ -1730,6 +1726,222 @@ def cmd_search(query=None):
         print(f"\n  \033[38;5;196m✗ Error: {e}\033[0m")
         time.sleep(2)
 
+def cmd_agent_status():
+    """Detailed status for the active agent"""
+    global private_agent_id
+    if not private_agent_id:
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        time.sleep(1.5)
+        return
+    
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║              AGENT STATUS REPORT              ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    print(f"  \033[38;5;93m→ Fetching detailed status for: {private_agent_id}...\033[0m\n")
+    
+    status = get_agent_status(private_agent_id)
+    if status:
+        print(f"  \033[38;5;141m✓ Status:\033[0m ONLINE")
+        print(f"  \033[38;5;135mUptime:\033[0m {status.get('uptime', 'N/A')} minutes")
+        
+        if status.get('current_game'):
+            game = status['current_game']
+            print(f"  \033[38;5;135mGame:\033[0m {game.get('name', 'Unknown')}")
+            print(f"  \033[38;5;135mPlace ID:\033[0m {game.get('place_id', 'Unknown')}")
+            print(f"  \033[38;5;135mPlayers:\033[0m {game.get('players', 'N/A')}")
+            print(f"  \033[38;5;135mSession Time:\033[0m {game.get('time_in_game', 'N/A')} minutes")
+        
+        print(f"\n  \033[38;5;135mAnti-AFK:\033[0m {'Active' if status.get('anti_afk_active') else 'Inactive'}")
+    else:
+        print(f"  \033[38;5;196m✗ Status: OFFLINE\033[0m")
+        print(f"  \033[38;5;93m→ Agent is not responding to requests\033[0m")
+        
+    input("\n  Press Enter to continue...")
+
+def cmd_nameagent():
+    """Set custom name for current agent"""
+    global private_agent_id
+    if not private_agent_id:
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        time.sleep(1.5)
+        return
+    
+    name = input("  Enter custom name → ").strip()
+    if not name:
+        print("\n  \033[38;5;196m✗ Name cannot be empty\033[0m")
+        time.sleep(1)
+        return
+    
+    if set_agent_name(private_agent_id, name):
+        print(f"\n  \033[38;5;141m✓ Agent renamed to: {name}\033[0m")
+    else:
+        print(f"\n  \033[38;5;196m✗ Failed to rename agent\033[0m")
+    input("\n  Press Enter to continue...")
+
+def cmd_staragent():
+    """Star an agent by ID or name"""
+    global private_agent_id
+    if not private_agent_id:
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        time.sleep(1.5)
+        return
+    
+    success, result = star_agent(private_agent_id)
+    if success:
+        print(f"\n  \033[38;5;141m✓ Agent {private_agent_id} starred successfully!\033[0m")
+    else:
+        print(f"\n  \033[38;5;196m✗ Failed to star agent: {result}\033[0m")
+    input("\n  Press Enter to continue...")
+
+def cmd_agent_starlist():
+    """View the currently starred agent"""
+    starred = get_starred_agent()
+    
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║            STARRED AGENT PROFILE              ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    if not starred:
+        print("  \033[38;5;196m✗ No starred agent found\033[0m")
+        print("  \033[38;5;93m→ Use 'staragent' to mark a favorite agent\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+
+    agent_id = starred['id']
+    agent_name = starred.get('name')
+
+    print("  \033[38;5;141m⭐ Starred Agent:\033[0m\n")
+
+    name_display = f" ({agent_name})" if agent_name else ""
+    print(f"  \033[38;5;135mAgent ID:\033[0m {agent_id}{name_display}")
+
+    try:
+        added_on = datetime.fromisoformat(starred['added_on']).strftime("%Y-%m-%d %H:%M")
+        print(f"  \033[38;5;93mAdded:\033[0m {added_on}")
+    except:
+        pass
+
+    try:
+        last_used = datetime.fromisoformat(starred['last_used']).strftime("%Y-%m-%d %H:%M")
+        print(f"  \033[38;5;93mLast Used:\033[0m {last_used}")
+    except:
+        pass
+    
+    input("\n  Press Enter to continue...")
+
+def cmd_agent_status():
+    """Detailed status for the active agent"""
+    global private_agent_id
+    if not private_agent_id:
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        time.sleep(1.5)
+        return
+    
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║              AGENT STATUS REPORT              ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    print(f"  \033[38;5;93m→ Fetching detailed status for: {private_agent_id}...\033[0m\n")
+    
+    status = get_agent_status(private_agent_id)
+    if status:
+        print(f"  \033[38;5;141m✓ Status:\033[0m ONLINE")
+        print(f"  \033[38;5;135mUptime:\033[0m {status.get('uptime', 'N/A')} minutes")
+        
+        if status.get('current_game'):
+            game = status['current_game']
+            print(f"  \033[38;5;135mGame:\033[0m {game.get('name', 'Unknown')}")
+            print(f"  \033[38;5;135mPlace ID:\033[0m {game.get('place_id', 'Unknown')}")
+            print(f"  \033[38;5;135mPlayers:\033[0m {game.get('players', 'N/A')}")
+            print(f"  \033[38;5;135mSession Time:\033[0m {game.get('time_in_game', 'N/A')} minutes")
+        
+        print(f"\n  \033[38;5;135mAnti-AFK:\033[0m {'Active' if status.get('anti_afk_active') else 'Inactive'}")
+    else:
+        print(f"  \033[38;5;196m✗ Status: OFFLINE\033[0m")
+        print(f"  \033[38;5;93m→ Agent is not responding to requests\033[0m")
+        
+    input("\n  Press Enter to continue...")
+
+def cmd_nameagent():
+    """Set custom name for current agent"""
+    global private_agent_id
+    if not private_agent_id:
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        time.sleep(1.5)
+        return
+    
+    name = input("  Enter custom name → ").strip()
+    if not name:
+        print("\n  \033[38;5;196m✗ Name cannot be empty\033[0m")
+        time.sleep(1)
+        return
+    
+    if set_agent_name(private_agent_id, name):
+        print(f"\n  \033[38;5;141m✓ Agent renamed to: {name}\033[0m")
+    else:
+        print(f"\n  \033[38;5;196m✗ Failed to rename agent\033[0m")
+    input("\n  Press Enter to continue...")
+
+def cmd_staragent():
+    """Star an agent by ID or name"""
+    global private_agent_id
+    if not private_agent_id:
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        time.sleep(1.5)
+        return
+    
+    success, result = star_agent(private_agent_id)
+    if success:
+        print(f"\n  \033[38;5;141m✓ Agent {private_agent_id} starred successfully!\033[0m")
+    else:
+        print(f"\n  \033[38;5;196m✗ Failed to star agent: {result}\033[0m")
+    input("\n  Press Enter to continue...")
+
+def cmd_agent_starlist():
+    """View the currently starred agent"""
+    starred = get_starred_agent()
+    
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║            STARRED AGENT PROFILE              ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    if not starred:
+        print("  \033[38;5;196m✗ No starred agent found\033[0m")
+        print("  \033[38;5;93m→ Use 'staragent' to mark a favorite agent\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+
+    agent_id = starred['id']
+    agent_name = starred.get('name')
+
+    print("  \033[38;5;141m⭐ Starred Agent:\033[0m\n")
+
+    name_display = f" ({agent_name})" if agent_name else ""
+    print(f"  \033[38;5;135mAgent ID:\033[0m {agent_id}{name_display}")
+
+    try:
+        added_on = datetime.fromisoformat(starred['added_on']).strftime("%Y-%m-%d %H:%M")
+        print(f"  \033[38;5;93mAdded:\033[0m {added_on}")
+    except:
+        pass
+
+    try:
+        last_used = datetime.fromisoformat(starred['last_used']).strftime("%Y-%m-%d %H:%M")
+        print(f"  \033[38;5;93mLast Used:\033[0m {last_used}")
+    except:
+        pass
+    
+    input("\n  Press Enter to continue...")
+
 def clear():
     print("\033[2J\033[H", end="")
 
@@ -1829,8 +2041,32 @@ def main():
         elif choice == "staragent":
             cmd_staragent()
         else:
-            print("\n  ✗ Invalid option")
-            time.sleep(1)
+            # Fallback for dynamic commands
+            cmd_name = choice.split()[0]
+            if cmd_name == "agent_ping": # Special case for ping
+                cmd_name = "ping"
+                
+            if connected_account:
+                result = send_command(connected_account, cmd_name, {"args": choice.split()[1:]})
+                if result.get("success"):
+                    print(f"\n  ✓ Command '{cmd_name}' executed successfully")
+                    print(f"  → Result: {result.get('data')}")
+                    input("\n  Press Enter to continue...")
+                else:
+                    print(f"\n  ✗ Invalid option or command failed")
+                    time.sleep(1)
+            elif private_agent_id:
+                result = send_agent_command(private_agent_id, cmd_name, {"args": choice.split()[1:]})
+                if result.get("success"):
+                    print(f"\n  ✓ Command '{cmd_name}' executed successfully")
+                    print(f"  → Result: {result.get('data')}")
+                    input("\n  Press Enter to continue...")
+                else:
+                    print(f"\n  ✗ Invalid option or command failed")
+                    time.sleep(1)
+            else:
+                print("\n  ✗ Invalid option")
+                time.sleep(1)
 
 if __name__ == "__main__":
     try:
