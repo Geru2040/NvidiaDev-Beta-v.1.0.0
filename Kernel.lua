@@ -58,6 +58,7 @@ end
 
 -- Global screenshot URL storage
 _G.LUMEN_SCREENSHOT_URL = nil
+_G.LUMEN_RECORD_URL = nil
 
 local function captureScreenshot()
     local RESOLUTION = { width = 854, height = 480 }
@@ -178,40 +179,22 @@ local function captureScreenshot()
     return true
 end
 
--- Global Command Handler Tables - DECLARED ONCE HERE
+-- Global Command Handler Tables
 local CommandHandlers = {}
-local AgentCommands = {}
 
--- Map all AgentCommands to CommandHandlers for better compatibility
-local function mapCommands()
-    print("🔧 DEBUG: Mapping AgentCommands to CommandHandlers...")
-    local count = 0
-    for name, func in pairs(AgentCommands) do
-        CommandHandlers[name] = func
-        count = count + 1
-        print("  ✓ Mapped: " .. name)
-    end
-    print("🔧 DEBUG: Total commands mapped: " .. count)
-    
-    -- List all available commands
-    print("🔧 DEBUG: Available commands in CommandHandlers:")
-    for name, _ in pairs(CommandHandlers) do
-        print("  • " .. name)
-    end
-end
-
--- Agent command handlers
-AgentCommands.screenshot = function(args)
+-- SCREENSHOT COMMANDS (Both in CommandHandlers directly)
+CommandHandlers.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
     return { success = true, message = "Screenshot capture started" }
 end
 
-AgentCommands.screenshot_status = function(args)
+CommandHandlers.screenshot_status = function(args)
     return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
-AgentCommands.screenrecord = function(args)
+-- SCREEN RECORD COMMANDS (Both in CommandHandlers directly)
+CommandHandlers.screenrecord = function(args)
     local duration = tonumber(args and args.duration) or 5
     if duration > 10 then duration = 10 end
 
@@ -351,11 +334,12 @@ AgentCommands.screenrecord = function(args)
     return { success = true, message = "Recording started" }
 end
 
-AgentCommands.record_status = function(args)
+CommandHandlers.record_status = function(args)
     return { success = true, data = _G.LUMEN_RECORD_URL or "PENDING" }
 end
 
-AgentCommands.agent_ping = function(args)
+-- AGENT COMMANDS
+CommandHandlers.agent_ping = function(args)
     return {
         success = true,
         message = "pong",
@@ -364,7 +348,7 @@ AgentCommands.agent_ping = function(args)
     }
 end
 
-AgentCommands.agent_status = function(args)
+CommandHandlers.agent_status = function(args)
     local currentGame = nil
 
     pcall(function()
@@ -386,7 +370,7 @@ AgentCommands.agent_status = function(args)
     }
 end
 
-AgentCommands.agent_attach = function(args)
+CommandHandlers.agent_attach = function(args)
     local placeId = args and args.place_id
     local autoScript = args and args.auto_script
 
@@ -665,7 +649,7 @@ AgentCommands.agent_attach = function(args)
     }
 end
 
-AgentCommands.agent_leave_game = function(args)
+CommandHandlers.agent_leave_game = function(args)
     game:Shutdown()
     return {
         success = true,
@@ -673,7 +657,7 @@ AgentCommands.agent_leave_game = function(args)
     }
 end
 
-AgentCommands.agent_execute = function(args)
+CommandHandlers.agent_execute = function(args)
     local script = args and args.script
 
     if not script then
@@ -704,7 +688,7 @@ AgentCommands.agent_execute = function(args)
     end
 end
 
-AgentCommands.agent_collect_data = function(args)
+CommandHandlers.agent_collect_data = function(args)
     local data = {
         game_info = {
             name = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name,
@@ -735,23 +719,12 @@ AgentCommands.agent_collect_data = function(args)
     }
 end
 
-AgentCommands.agent_disconnect = function(args)
+CommandHandlers.agent_disconnect = function(args)
     IS_AGENT_MODE = false
     return {
         success = true,
         message = "Agent mode disabled"
     }
-end
-
--- Regular command handlers (NO "local" keyword here - adding to existing table)
-CommandHandlers.screenshot = function(args)
-    _G.LUMEN_SCREENSHOT_URL = "PENDING"
-    captureScreenshot()
-    return { success = true, message = "Screenshot capture started" }
-end
-
-CommandHandlers.screenshot_status = function(args)
-    return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
 CommandHandlers.ping = function(args)
@@ -1234,29 +1207,10 @@ local function executeCommand(cmd)
 
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("⚡ Executing command: " .. commandName)
-    print("🔧 DEBUG: Command ID: " .. commandId)
-    print("🔧 DEBUG: Args: " .. HttpService:JSONEncode(args))
-    
-    -- Check if command exists in CommandHandlers
-    print("🔧 DEBUG: Checking CommandHandlers['" .. commandName .. "']...")
-    if CommandHandlers[commandName] then
-        print("  ✓ Found in CommandHandlers")
-    else
-        print("  ✗ NOT found in CommandHandlers")
-    end
-    
-    -- Check if command exists in AgentCommands
-    print("🔧 DEBUG: Checking AgentCommands['" .. commandName .. "']...")
-    if AgentCommands[commandName] then
-        print("  ✓ Found in AgentCommands")
-    else
-        print("  ✗ NOT found in AgentCommands")
-    end
 
-    local handler = CommandHandlers[commandName] or AgentCommands[commandName]
+    local handler = CommandHandlers[commandName]
     
     if handler then
-        print("✓ Handler found, executing...")
         local success, result = pcall(function()
             return handler(args)
         end)
@@ -1278,11 +1232,6 @@ local function executeCommand(cmd)
             warn("✗ Command error: " .. tostring(result))
         end
     else
-        print("✗ NO HANDLER FOUND!")
-        print("🔧 DEBUG: Available commands:")
-        for name, _ in pairs(CommandHandlers) do
-            print("  • " .. name)
-        end
         sendResponse(commandId, {error = "Unknown command: " .. commandName}, "failed")
         warn("✗ Unknown command: " .. commandName)
     end
@@ -1313,10 +1262,4 @@ local function startCommandListener()
 end
 
 -- Start the listener
-print("🔧 DEBUG: Starting initialization...")
-print("🔧 DEBUG: About to call mapCommands()...")
-mapCommands()
-print("🔧 DEBUG: mapCommands() completed!")
-print("🔧 DEBUG: Starting command listener...")
 startCommandListener()
-print("🔧 DEBUG: Initialization complete!")
