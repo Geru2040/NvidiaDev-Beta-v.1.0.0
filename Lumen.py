@@ -1824,9 +1824,7 @@ def main():
             cmd_screenshot()
         elif choice.startswith("screenrecord"):
             args = choice.replace("screenrecord", "", 1).strip()
-            # If user types 'screenrecord', args will be empty string
-            # If user types 'screenrecord 10', args will be '10'
-            cmd_screenrecord(args if args != "" else None)
+            cmd_screenrecord(args if args else None)
         elif choice == "agent":
             cmd_agent()
         elif choice == "agent --list":
