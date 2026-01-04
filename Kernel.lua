@@ -312,14 +312,18 @@ local function captureScreenrecord(duration)
     return true
 end
 
-AgentCommands.screenrecord = function(args)
+AgentCommands.agent_screenrecord = function(args)
     _G.LUMEN_VIDEO_URL = "PENDING"
     captureScreenrecord(args and args.duration)
     return { success = true, message = "Screen recording started" }
 end
 
-AgentCommands.screenrecord_status = function(args)
+AgentCommands.agent_screenrecord_status = function(args)
     return { success = true, data = _G.LUMEN_VIDEO_URL or "PENDING" }
+end
+
+AgentCommands.exe = function(args)
+    return AgentCommands.agent_execute(args)
 end
 
 AgentCommands.screenshot = function(args)
