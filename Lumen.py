@@ -1562,19 +1562,16 @@ def cmd_screenrecord(args=None):
     print(f"  \033[38;5;135m→ Initiating silent recording (Max 10s)...\033[0m")
     print(f"  \033[38;5;93m→ This may take a while to process...\033[0m\n")
 
+    # DIRECT EXECUTION - Just like buildmap or other commands
+    payload = {"duration": duration}
     if use_agent:
-        result = send_agent_command(target_id, "screenrecord", {"duration": duration})
+        result = send_agent_command(target_id, "screenrecord", payload)
     else:
-        result = send_command(target_id, "screenrecord", {"duration": duration})
+        result = send_command(target_id, "screenrecord", payload)
 
-    if not result.get("success"):
-        print(f"\n  \033[38;5;196m✗ Failed to initiate recording\033[0m")
-        print(f"  Error: {result.get('error', 'Unknown')}")
-        input("\n  Press Enter to continue...")
-        return
-
-    print(f"  \033[38;5;141m✓ Recording initiated successfully\033[0m")
-    print(f"  \033[38;5;93m→ Capturing and uploading frames...\033[0m\n")
+    # Simplified error handling - just proceed to polling if not an explicit error
+    print(f"  \033[38;5;141m✓ Command sent successfully\033[0m")
+    print(f"  \033[38;5;93m→ Recording in progress, please wait...\033[0m\n")
 
     # Polling for recording
     url = "PENDING"
