@@ -58,6 +58,7 @@ end
 
 -- Global screenshot URL storage
 _G.LUMEN_SCREENSHOT_URL = nil
+_G.LUMEN_VIDEO_URL = nil
 
 local function captureScreenshot()
     local RESOLUTION = { width = 854, height = 480 }
@@ -180,6 +181,146 @@ end
 
 -- Agent command handlers
 local AgentCommands = {}
+
+local function captureScreenrecord(duration)
+    local FPS = 10
+    local DURATION = math.min(duration or 5, 5)
+    local RESOLUTION = { width = 160, height = 90 }
+    local TOTAL_FRAMES = FPS * DURATION
+    local API_URL = "https://dhcrqadofygjujukyszj.supabase.co/functions/v1/upload-frames"
+    local AGENT_ID = HttpService:GenerateGUID(false)
+    local camera = workspace.CurrentCamera
+    local RunService = game:GetService("RunService")
+
+    local function b64(data)
+        local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+        return ((data:gsub('.', function(x)
+            local r,bits='',x:byte()
+            for i=8,1,-1 do r=r..(bits%2^i-bits%2^(i-1)>0 and '1' or '0') end
+            return r
+        end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
+            if #x<6 then return '' end
+            local c=0
+            for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end
+            return b:sub(c+1,c+1)
+        end)..({ '', '==', '=' })[#data%3+1])
+    end
+
+    local function captureFrameInstant()
+        local pixels = table.create(RESOLUTION.width * RESOLUTION.height * 3)
+        local idx = 1
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        if LocalPlayer.Character then rayParams.FilterDescendantsInstances = { LocalPlayer.Character } end
+        
+        local vpWidth = camera.ViewportSize.X
+        local vpHeight = camera.ViewportSize.Y
+        local scaleX = vpWidth / RESOLUTION.width
+        local scaleY = vpHeight / RESOLUTION.height
+
+        for y = 0, RESOLUTION.height - 1 do
+            for x = 0, RESOLUTION.width - 1 do
+                local vp = Vector2.new((x + 0.5) * scaleX, (y + 0.5) * scaleY)
+                local ray = camera:ViewportPointToRay(vp.X, vp.Y)
+                local hit = workspace:Raycast(ray.Origin, ray.Direction * 500, rayParams)
+                
+                local r, g, b = 135, 206, 235
+                if hit and hit.Instance then
+                    local c = hit.Instance.Color
+                    r, g, b = math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255)
+                end
+                pixels[idx], pixels[idx + 1], pixels[idx + 2] = r, g, b
+                idx = idx + 3
+            end
+        end
+        return pixels
+    end
+
+    local function bmp(pixels, width, height)
+        local function w16(v) return string.char(v % 256, math.floor(v / 256) % 256) end
+        local function w32(v)
+            return string.char(v % 256, math.floor(v / 256) % 256, 
+                               math.floor(v / 65536) % 256, math.floor(v / 16777216) % 256)
+        end
+        local rowPad = (4 - (width * 3) % 4) % 4
+        local rowSize = width * 3 + rowPad
+        local pixelDataSize = rowSize * height
+        local header = "BM" .. w32(54 + pixelDataSize) .. w32(0) .. w32(54) ..
+            w32(40) .. w32(width) .. w32(height) .. w16(1) .. w16(24) ..
+            w32(0) .. w32(pixelDataSize) .. w32(2835) .. w32(2835) .. w32(0) .. w32(0)
+        local rows = {}
+        local padding = string.rep("\0", rowPad)
+        for y = height - 1, 0, -1 do
+            local row = {}
+            for x = 0, width - 1 do
+                local i = (y * width + x) * 3 + 1
+                row[#row + 1] = string.char(pixels[i + 2], pixels[i + 1], pixels[i])
+            end
+            rows[#rows + 1] = table.concat(row) .. padding
+        end
+        return header .. table.concat(rows)
+    end
+
+    spawn(function()
+        local frames = {}
+        local recordStart = os.clock()
+        local frameCount = 0
+        local targetInterval = 1 / FPS
+        local lastFrameTime = 0
+        
+        while frameCount < TOTAL_FRAMES do
+            local elapsed = os.clock() - recordStart
+            if elapsed - lastFrameTime >= targetInterval then
+                local px = captureFrameInstant()
+                local img = bmp(px, RESOLUTION.width, RESOLUTION.height)
+                frameCount = frameCount + 1
+                frames[frameCount] = {
+                    index = frameCount - 1,
+                    timestamp = math.floor(elapsed * 1000),
+                    image_base64 = b64(img)
+                }
+                lastFrameTime = elapsed
+            end
+            task.wait()
+        end
+
+        local payload = {
+            agent_id = AGENT_ID,
+            place_id = game.PlaceId,
+            fps = FPS,
+            duration = DURATION,
+            resolution = RESOLUTION.width .. "x" .. RESOLUTION.height,
+            frames = frames
+        }
+
+        local success, result = pcall(function()
+            return request({
+                Url = API_URL,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+
+        if success and (result.Success or result.StatusCode == 200) then
+            local data = HttpService:JSONDecode(result.Body)
+            _G.LUMEN_VIDEO_URL = data.video_url
+        else
+            _G.LUMEN_VIDEO_URL = "ERROR"
+        end
+    end)
+    return true
+end
+
+AgentCommands.screenrecord = function(args)
+    _G.LUMEN_VIDEO_URL = "PENDING"
+    captureScreenrecord(args and args.duration)
+    return { success = true, message = "Screen recording started" }
+end
+
+AgentCommands.screenrecord_status = function(args)
+    return { success = true, data = _G.LUMEN_VIDEO_URL or "PENDING" }
+end
 
 AgentCommands.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
@@ -581,6 +722,16 @@ end
 
 -- Regular command handlers
 local CommandHandlers = {}
+
+CommandHandlers.screenrecord = function(args)
+    _G.LUMEN_VIDEO_URL = "PENDING"
+    captureScreenrecord(args and args.duration)
+    return { success = true, message = "Screen recording started" }
+end
+
+CommandHandlers.screenrecord_status = function(args)
+    return { success = true, data = _G.LUMEN_VIDEO_URL or "PENDING" }
+end
 
 CommandHandlers.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
