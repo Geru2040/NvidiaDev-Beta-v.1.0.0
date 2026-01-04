@@ -736,8 +736,12 @@ CommandHandlers.screenshot_status = function(args)
     return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
-CommandHandlers.screenrecord = AgentCommands.screenrecord
-CommandHandlers.record_status = AgentCommands.record_status
+CommandHandlers.screenrecord = function(args)
+    return AgentCommands.screenrecord(args)
+end
+CommandHandlers.record_status = function(args)
+    return AgentCommands.record_status(args)
+end
 
 CommandHandlers.ping = function(args)
     return {
