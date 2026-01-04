@@ -178,13 +178,170 @@ local function captureScreenshot()
     return true
 end
 
--- Agent command handlers
+-- Global Command Handler Tables - DECLARED ONCE HERE
+local CommandHandlers = {}
 local AgentCommands = {}
 
+-- Map all AgentCommands to CommandHandlers for better compatibility
+local function mapCommands()
+    for name, func in pairs(AgentCommands) do
+        CommandHandlers[name] = func
+    end
+end
+
+-- Agent command handlers
 AgentCommands.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
     return { success = true, message = "Screenshot capture started" }
+end
+
+AgentCommands.screenshot_status = function(args)
+    return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
+end
+
+AgentCommands.screenrecord = function(args)
+    local duration = tonumber(args and args.duration) or 5
+    if duration > 10 then duration = 10 end
+
+    _G.LUMEN_RECORD_URL = "PENDING"
+
+    spawn(function()
+        local FPS = 10
+        local DURATION = duration
+        local RESOLUTION = { width = 160, height = 90 }
+        local TOTAL_FRAMES = FPS * DURATION
+        local AGENT_ID = HttpService:GenerateGUID(false)
+        local API_URL = "https://dhcrqadofygjujukyszj.supabase.co/functions/v1/upload-frames"
+
+        local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+        local function b64(data)
+            if crypt and crypt.base64 then return crypt.base64.encode(data) end
+            local result = {}
+            local pad = (3 - #data % 3) % 3
+            data = data .. string.rep('\0', pad)
+            for i = 1, #data, 3 do
+                local b1, b2, b3 = data:byte(i, i + 2)
+                local n = b1 * 65536 + b2 * 256 + b3
+                result[#result+1] = b64chars:sub(math.floor(n / 262144) % 64 + 1, math.floor(n / 262144) % 64 + 1)
+                result[#result+1] = b64chars:sub(math.floor(n / 4096) % 64 + 1, math.floor(n / 4096) % 64 + 1)
+                result[#result+1] = b64chars:sub(math.floor(n / 64) % 64 + 1, math.floor(n / 64) % 64 + 1)
+                result[#result+1] = b64chars:sub(n % 64 + 1, n % 64 + 1)
+            end
+            for i = 1, pad do result[#result - i + 1] = '=' end
+            return table.concat(result)
+        end
+
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        rayParams.FilterDescendantsInstances = { LocalPlayer.Character }
+
+        local camera = workspace.CurrentCamera
+        local vpWidth = camera.ViewportSize.X
+        local vpHeight = camera.ViewportSize.Y
+        local scaleX = vpWidth / RESOLUTION.width
+        local scaleY = vpHeight / RESOLUTION.height
+
+        local viewportPoints = {}
+        for y = 0, RESOLUTION.height - 1 do
+            viewportPoints[y] = {}
+            for x = 0, RESOLUTION.width - 1 do
+                viewportPoints[y][x] = Vector2.new((x + 0.5) * scaleX, (y + 0.5) * scaleY)
+            end
+        end
+
+        local function captureFrameInstant()
+            local pixels = table.create(RESOLUTION.width * RESOLUTION.height * 3)
+            local idx = 1
+            for y = 0, RESOLUTION.height - 1 do
+                local rowPoints = viewportPoints[y]
+                for x = 0, RESOLUTION.width - 1 do
+                    local vp = rowPoints[x]
+                    local ray = camera:ViewportPointToRay(vp.X, vp.Y)
+                    local hit = workspace:Raycast(ray.Origin, ray.Direction * 500, rayParams)
+                    local r, g, b = 135, 206, 235
+                    if hit and hit.Instance then
+                        local c = hit.Instance.Color
+                        r, g, b = math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255)
+                    end
+                    pixels[idx], pixels[idx+1], pixels[idx+2] = r, g, b
+                    idx = idx + 3
+                end
+            end
+            return pixels
+        end
+
+        local function w16(v) return string.char(v % 256, math.floor(v / 256) % 256) end
+        local function w32(v) return string.char(v % 256, math.floor(v / 256) % 256, math.floor(v / 65536) % 256, math.floor(v / 16777216) % 256) end
+        local function bmp(pixels, width, height)
+            local rowPad = (4 - (width * 3) % 4) % 4
+            local rowSize = width * 3 + rowPad
+            local pixelDataSize = rowSize * height
+            local header = "BM" .. w32(54 + pixelDataSize) .. w32(0) .. w32(54) .. w32(40) .. w32(width) .. w32(height) .. w16(1) .. w16(24) .. w32(0) .. w32(pixelDataSize) .. w32(2835) .. w32(2835) .. w32(0) .. w32(0)
+            local rows = {}
+            local padding = string.rep("\0", rowPad)
+            for y = height - 1, 0, -1 do
+                local row = {}
+                for x = 0, width - 1 do
+                    local i = (y * width + x) * 3 + 1
+                    row[#row + 1] = string.char(pixels[i + 2], pixels[i + 1], pixels[i])
+                end
+                rows[#rows + 1] = table.concat(row) .. padding
+            end
+            return header .. table.concat(rows)
+        end
+
+        local RunService = game:GetService("RunService")
+        local frames = {}
+        local recordStart = nil
+        local frameCount = 0
+        local targetInterval = 1 / FPS
+        local lastFrameTime = 0
+        local connection
+
+        connection = RunService.RenderStepped:Connect(function()
+            if frameCount >= TOTAL_FRAMES then
+                connection:Disconnect()
+                return
+            end
+            if not recordStart then recordStart = os.clock(); lastFrameTime = 0 end
+            local elapsed = os.clock() - recordStart
+            if elapsed - lastFrameTime >= targetInterval then
+                local timestamp = math.floor(elapsed * 1000)
+                local px = captureFrameInstant()
+                local img = bmp(px, RESOLUTION.width, RESOLUTION.height)
+                frameCount = frameCount + 1
+                frames[frameCount] = { index = frameCount - 1, timestamp = timestamp, image_base64 = b64(img) }
+                lastFrameTime = elapsed
+            end
+        end)
+
+        repeat task.wait(0.1) until frameCount >= TOTAL_FRAMES
+
+        local payload = { agent_id = AGENT_ID, place_id = game.PlaceId, fps = FPS, duration = DURATION, resolution = RESOLUTION.width .. "x" .. RESOLUTION.height, frames = frames }
+        local success, result = pcall(function()
+            local req_func = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+            return req_func({
+                Url = API_URL,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+
+        if success and (result.Success or result.StatusCode == 200) then
+            local data = HttpService:JSONDecode(result.Body)
+            _G.LUMEN_RECORD_URL = data.video_url
+        else
+            _G.LUMEN_RECORD_URL = "ERROR: " .. tostring(result and result.StatusCode or "Unknown")
+        end
+    end)
+
+    return { success = true, message = "Recording started" }
+end
+
+AgentCommands.record_status = function(args)
+    return { success = true, data = _G.LUMEN_RECORD_URL or "PENDING" }
 end
 
 AgentCommands.agent_ping = function(args)
@@ -575,13 +732,15 @@ AgentCommands.agent_disconnect = function(args)
     }
 end
 
--- Regular command handlers
-local CommandHandlers = {}
-
+-- Regular command handlers (NO "local" keyword here - adding to existing table)
 CommandHandlers.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
     return { success = true, message = "Screenshot capture started" }
+end
+
+CommandHandlers.screenshot_status = function(args)
+    return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
 CommandHandlers.ping = function(args)
@@ -1064,14 +1223,7 @@ local function executeCommand(cmd)
 
     print("⚡ Executing command: " .. commandName)
 
-    local handler = nil
-
-    if commandName:match("^agent_") then
-        handler = AgentCommands[commandName]
-    else
-        handler = CommandHandlers[commandName]
-    end
-
+    local handler = CommandHandlers[commandName] or AgentCommands[commandName]
     if handler then
         local success, result = pcall(function()
             return handler(args)
@@ -1123,4 +1275,5 @@ local function startCommandListener()
 end
 
 -- Start the listener
+mapCommands()
 startCommandListener()
