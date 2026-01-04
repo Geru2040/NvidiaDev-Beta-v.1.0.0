@@ -955,17 +955,18 @@ def cmd_screenshot():
     print(f"  \033[38;5;141m✓ Capture initiated successfully\033[0m")
     print(f"  \033[38;5;93m→ Waiting for upload to complete...\033[0m\n")
 
-    # Wait for capture to complete (60 seconds max)
-    time.sleep(5)
+    # Wait for capture to complete (90 seconds max)
+    time.sleep(2)
 
     url = "PENDING"
-    for attempt in range(15):  # 75 seconds total
+    # Increased attempts for long captures
+    for attempt in range(45):  # ~90 seconds total
         dots = "." * ((attempt % 3) + 1) + " " * (2 - (attempt % 3))
         print(f"  \033[38;5;135m⏳ Processing{dots}\033[0m", end='\r', flush=True)
-        time.sleep(5)
+        time.sleep(2)
 
         # Check the global variable on target
-        check_script = "return _G.LUMEN_SCREENSHOT_URL"
+        check_script = "return _G.LUMEN_SCREENSHOT_URL or 'PENDING'"
         if use_agent:
             check_result = send_agent_command(target_id, "exe", {"script": check_script})
         else:
@@ -973,23 +974,38 @@ def cmd_screenshot():
 
         if check_result.get("success"):
             data = check_result.get("data")
-            # Parse the URL from the response
+            # The executor might return the value directly or wrapped in a response field
             found_url = None
-            if isinstance(data, str) and data.startswith("http"):
-                found_url = data
-            elif isinstance(data, dict):
-                res_val = data.get("response", data.get("data", data.get("url")))
-                if isinstance(res_val, dict):
-                    res_val = res_val.get("url", res_val.get("data", res_val.get("response")))
-                if isinstance(res_val, str) and res_val.startswith("http"):
-                    found_url = res_val
+            
+            # Helper to extract URL from various response formats
+            def extract_url(val):
+                if isinstance(val, str) and val.startswith("http"):
+                    return val
+                if isinstance(val, dict):
+                    # Check common keys in response
+                    for k in ["url", "response", "result", "data"]:
+                        res = extract_url(val.get(k))
+                        if res: return res
+                    # Also check values in case it's a {key: value} pair where value is the URL
+                    for v in val.values():
+                        res = extract_url(v)
+                        if res: return res
+                return None
+
+            found_url = extract_url(data)
 
             if found_url:
                 url = found_url
                 break
+            
+            # Check if it explicitly says PENDING (still capturing)
+            # Use lower() for case-insensitive check
+            data_str = str(data).strip().upper()
+            if data_str == "PENDING":
+                continue
 
-            if isinstance(data, str) and "ERROR" in data:
-                url = data
+            if "ERROR" in data_str or "FAILED" in data_str:
+                url = data if isinstance(data, str) else str(data)
                 break
 
     clear()
