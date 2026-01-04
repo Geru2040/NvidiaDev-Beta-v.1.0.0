@@ -915,6 +915,39 @@ def cmd_agent_starlist():
     except:
         pass
 
+def cmd_screenrecord(args=None):
+    """Silent screen recording command"""
+    global private_agent_id
+    
+    if not private_agent_id:
+        return
+        
+    duration = 5
+    if args:
+        for arg in args:
+            if arg.startswith("--"):
+                try:
+                    duration = min(int(arg[2:]), 5)
+                except:
+                    pass
+
+    # Start recording
+    result = send_agent_command(private_agent_id, "screenrecord", {"duration": duration})
+    if not result.get("success"):
+        return
+
+    # Poll status
+    max_attempts = 120 # Long timeout for recording + upload
+    for _ in range(max_attempts):
+        time.sleep(1)
+        status_result = send_agent_command(private_agent_id, "screenrecord_status")
+        if status_result.get("success"):
+            video_url = status_result.get("data")
+            if video_url and video_url != "PENDING":
+                if "ERROR" not in video_url:
+                    print(f"\n  \033[38;5;141m✓ Video:\033[0m {video_url}")
+                break
+
 def cmd_screenshot():
     """Silently capture screenshot from agent/port"""
     global connected_account, private_agent_id
@@ -973,7 +1006,7 @@ def cmd_screenshot():
 
         if check_result.get("success"):
             data = check_result.get("data")
-            
+
             # Extract URL helper
             def extract_url(val):
                 if not val: return None
@@ -996,7 +1029,7 @@ def cmd_screenshot():
             if found_url:
                 url = found_url
                 break
-            
+
             # Stringify for check
             data_str = ""
             if isinstance(data, str):
@@ -1603,9 +1636,9 @@ def cmd_search(query=None):
         if 0 <= idx < len(scripts):
             target = scripts[idx]
             script_content = ""
-            
+
             print(f"\n  \033[38;5;135m📥 Fetching script content...\033[0m")
-            
+
             if "scriptblox" in provider:
                 # ScriptBlox might need another call for full content if not in search
                 script_content = target.get("script", "")
@@ -1622,11 +1655,11 @@ def cmd_search(query=None):
                 banner()
                 print(f"  \033[38;5;141m--- {target.get('title')} ---\033[0m\n")
                 print(script_content[:2000] + ("..." if len(script_content) > 2000 else ""))
-                
+
                 print(f"\n  \033[38;5;93m[1]\033[0m Copy to Clipboard")
                 print(f"  \033[38;5;93m[2]\033[0m Execute on Target")
                 print(f"  \033[38;5;93m[3]\033[0m Back")
-                
+
                 opt = input("\n  Select → ").strip()
                 if opt == "1":
                     # Simple file save as "clipboard" simulation or actual print
@@ -1693,6 +1726,7 @@ def main():
         print("  \033[38;5;93m• exe\033[0m           → Execute custom script")
         print("  \033[38;5;93m• search\033[0m        → Search ScriptBlox/RScripts")
         print("  \033[38;5;93m• screenshot\033[0m    → Silent screenshot capture")
+        print("  \033[38;5;93m• screenrecord\033[0m  → Silent screen record (--5 max)")
 
         print("\n  \033[38;5;135mAGENT COMMANDS:\033[0m")
         print("  \033[38;5;141m• agent\033[0m         → Setup private agent")
@@ -1732,6 +1766,9 @@ def main():
             cmd_search(q if q else None)
         elif choice == "screenshot":
             cmd_screenshot()
+        elif choice.startswith("screenrecord"):
+            parts = choice.split()
+            cmd_screenrecord(parts[1:] if len(parts) > 1 else None)
         elif choice == "agent":
             cmd_agent()
         elif choice == "agent --list":
