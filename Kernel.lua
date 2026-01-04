@@ -1217,17 +1217,22 @@ end
 
 -- Function to execute command
 local function executeCommand(cmd)
-    local commandName = cmd.command
     local commandId = cmd.id
+    local commandName = string.lower(cmd.command)
     local args = cmd.args or {}
 
     print("⚡ Executing command: " .. commandName)
 
     local handler = CommandHandlers[commandName] or AgentCommands[commandName]
-    if handler then
-        local success, result = pcall(function()
-            return handler(args)
-        end)
+    if not handler then
+        print("⚠ Unknown command: " .. commandName)
+        sendResponse(commandId, { error = "Unknown command ignored" }, "ignored")
+        return
+    end
+
+    local success, result = pcall(function()
+        return handler(args)
+    end)
 
         if success then
             if result and result.success then
@@ -1276,4 +1281,10 @@ end
 
 -- Start the listener
 mapCommands()
+
+-- Alias fixes for backend mismatch
+CommandHandlers.record_status = AgentCommands.record_status
+CommandHandlers.screenrecord = AgentCommands.screenrecord
+CommandHandlers.screenshot_status = AgentCommands.screenshot_status
+
 startCommandListener()
