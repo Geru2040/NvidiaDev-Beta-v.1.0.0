@@ -739,6 +739,7 @@ end
 CommandHandlers.screenrecord = function(args)
     return AgentCommands.screenrecord(args)
 end
+
 CommandHandlers.record_status = function(args)
     return AgentCommands.record_status(args)
 end
