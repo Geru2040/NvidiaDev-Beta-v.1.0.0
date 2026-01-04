@@ -912,6 +912,9 @@ def cmd_agent_starlist():
     try:
         last_used = datetime.fromisoformat(starred['last_used']).strftime("%Y-%m-%d %H:%M")
         print(f"  \033[38;5;93mLast Used:\033[0m {last_used}")
+    except:
+        pass
+
 def cmd_screenshot():
     """Silently capture screenshot from agent/port"""
     global connected_account, private_agent_id
@@ -980,11 +983,11 @@ def cmd_screenshot():
                     res_val = res_val.get("url", res_val.get("data", res_val.get("response")))
                 if isinstance(res_val, str) and res_val.startswith("http"):
                     found_url = res_val
-            
+
             if found_url:
                 url = found_url
                 break
-            
+
             if isinstance(data, str) and "ERROR" in data:
                 url = data
                 break
