@@ -1569,7 +1569,7 @@ def cmd_screenrecord(args=None):
     else:
         result = send_command(target_id, "screenrecord", payload)
 
-    # Simplified error handling - just proceed to polling if not an explicit error
+    # Simplified success check
     print(f"  \033[38;5;141m✓ Command sent successfully\033[0m")
     print(f"  \033[38;5;93m→ Recording in progress, please wait...\033[0m\n")
 
@@ -1585,13 +1585,13 @@ def cmd_screenrecord(args=None):
         else:
             check_result = send_command(target_id, "record_status")
 
-        if check_result.get("success"):
+        if check_result and check_result.get("success"):
             data = check_result.get("data")
             if isinstance(data, str):
                 if data.startswith("http"):
                     url = data
                     break
-                elif "ERROR" in data.upper() or "FAILED" in data.upper():
+                elif "ERROR" in data.upper():
                     url = data
                     break
             elif isinstance(data, dict):
