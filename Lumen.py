@@ -1282,7 +1282,13 @@ return url
 
     url = "PENDING"
     if url_result.get("success"):
+        # The result data contains the actual return value from the Lua script
         url = url_result.get("data", "PENDING")
+        # If the response is a dictionary, try to get the 'response' or similar
+        if isinstance(url, dict):
+            url = url.get("response", url)
+            if isinstance(url, dict):
+                url = url.get("data", url)
 
     print(f"  \033[38;5;141m✓ Screenshot captured successfully!\033[0m\n")
     print(f"  \033[38;5;93m→ Target: {target_id}\033[0m")
