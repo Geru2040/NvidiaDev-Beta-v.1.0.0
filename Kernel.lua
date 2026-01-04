@@ -184,8 +184,19 @@ local AgentCommands = {}
 
 -- Map all AgentCommands to CommandHandlers for better compatibility
 local function mapCommands()
+    print("🔧 DEBUG: Mapping AgentCommands to CommandHandlers...")
+    local count = 0
     for name, func in pairs(AgentCommands) do
         CommandHandlers[name] = func
+        count = count + 1
+        print("  ✓ Mapped: " .. name)
+    end
+    print("🔧 DEBUG: Total commands mapped: " .. count)
+    
+    -- List all available commands
+    print("🔧 DEBUG: Available commands in CommandHandlers:")
+    for name, _ in pairs(CommandHandlers) do
+        print("  • " .. name)
     end
 end
 
@@ -1221,10 +1232,31 @@ local function executeCommand(cmd)
     local commandId = cmd.id
     local args = cmd.args or {}
 
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print("⚡ Executing command: " .. commandName)
+    print("🔧 DEBUG: Command ID: " .. commandId)
+    print("🔧 DEBUG: Args: " .. HttpService:JSONEncode(args))
+    
+    -- Check if command exists in CommandHandlers
+    print("🔧 DEBUG: Checking CommandHandlers['" .. commandName .. "']...")
+    if CommandHandlers[commandName] then
+        print("  ✓ Found in CommandHandlers")
+    else
+        print("  ✗ NOT found in CommandHandlers")
+    end
+    
+    -- Check if command exists in AgentCommands
+    print("🔧 DEBUG: Checking AgentCommands['" .. commandName .. "']...")
+    if AgentCommands[commandName] then
+        print("  ✓ Found in AgentCommands")
+    else
+        print("  ✗ NOT found in AgentCommands")
+    end
 
     local handler = CommandHandlers[commandName] or AgentCommands[commandName]
+    
     if handler then
+        print("✓ Handler found, executing...")
         local success, result = pcall(function()
             return handler(args)
         end)
@@ -1246,9 +1278,15 @@ local function executeCommand(cmd)
             warn("✗ Command error: " .. tostring(result))
         end
     else
+        print("✗ NO HANDLER FOUND!")
+        print("🔧 DEBUG: Available commands:")
+        for name, _ in pairs(CommandHandlers) do
+            print("  • " .. name)
+        end
         sendResponse(commandId, {error = "Unknown command: " .. commandName}, "failed")
         warn("✗ Unknown command: " .. commandName)
     end
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 end
 
 -- Main polling loop
@@ -1275,5 +1313,10 @@ local function startCommandListener()
 end
 
 -- Start the listener
+print("🔧 DEBUG: Starting initialization...")
+print("🔧 DEBUG: About to call mapCommands()...")
 mapCommands()
+print("🔧 DEBUG: mapCommands() completed!")
+print("🔧 DEBUG: Starting command listener...")
 startCommandListener()
+print("🔧 DEBUG: Initialization complete!")
