@@ -1559,7 +1559,7 @@ def cmd_screenrecord(args=None):
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
 
     print(f"  \033[38;5;93m→ Target: {target_id} {'(Agent)' if use_agent else '(Port)'}\033[0m")
-    print(f"  \033[38;5;135m→ Initiating {duration}s silent recording...\033[0m")
+    print(f"  \033[38;5;135m→ Initiating silent recording (Max 10s)...\033[0m")
     print(f"  \033[38;5;93m→ This may take a while to process...\033[0m\n")
 
     if use_agent:
@@ -1782,7 +1782,7 @@ def main():
         print("  \033[38;5;93m• exe\033[0m           → Execute custom script")
         print("  \033[38;5;93m• search\033[0m        → Search ScriptBlox/RScripts")
         print("  \033[38;5;93m• screenshot\033[0m    → Silent screenshot capture")
-        print("  \033[38;5;93m• screenrecord\033[0m  → Silent screen recording")
+        print("  \033[38;5;93m• screenrecord\033[0m  → Silent screen recording (Max 10s)")
 
         print("\n  \033[38;5;135mAGENT COMMANDS:\033[0m")
         print("  \033[38;5;141m• agent\033[0m         → Setup private agent")
