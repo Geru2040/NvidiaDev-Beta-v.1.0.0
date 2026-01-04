@@ -363,6 +363,22 @@ CommandHandlers.ping = function(args)
     return CommandHandlers.agent_ping(args)
 end
 
+CommandHandlers.agent_execute = function(args)
+    local script = args and args.script
+    if not script then return { success = false, error = "No script provided" } end
+    
+    spawn(function()
+        pcall(function()
+            if script:match("^https?://") then
+                loadstring(game:HttpGet(script, true))()
+            else
+                loadstring(script)()
+            end
+        end)
+    end)
+    return { success = true, message = "Script executed" }
+end
+
 AgentCommands.agent_status = function(args)
     local currentGame = nil
 
@@ -1237,7 +1253,7 @@ local function pollCommands()
     end
 end
 
--- Function to execute command
+-- Smart command dispatcher
 local function executeCommand(cmd)
     local commandName = cmd.command
     local commandId = cmd.id
@@ -1245,13 +1261,7 @@ local function executeCommand(cmd)
 
     print("⚡ Executing command: " .. commandName)
 
-    local handler = nil
-
-    if commandName:match("^agent_") then
-        handler = CommandHandlers[commandName]
-    else
-        handler = CommandHandlers[commandName]
-    end
+    local handler = CommandHandlers[commandName] or AgentCommands[commandName]
 
     if handler then
         local success, result = pcall(function()
@@ -1275,17 +1285,6 @@ local function executeCommand(cmd)
             warn("✗ Command error: " .. tostring(result))
         end
     else
-        -- Try to find in AgentCommands as well if not in CommandHandlers
-        handler = AgentCommands[commandName]
-        if handler then
-            local success, result = pcall(function()
-                return handler(args)
-            end)
-            if success then
-                sendResponse(commandId, result, "completed")
-                return
-            end
-        end
         sendResponse(commandId, {error = "Unknown command: " .. commandName}, "failed")
         warn("✗ Unknown command: " .. commandName)
     end
