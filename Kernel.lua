@@ -65,7 +65,7 @@ local function captureScreenshot()
     local AGENT_ID = HttpService:GenerateGUID(false)
     local camera = workspace.CurrentCamera
     local Lighting = game:GetService("Lighting")
-    
+
     local function base64encode(data)
         if crypt and crypt.base64 and crypt.base64.encode then return crypt.base64.encode(data) end
         local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
@@ -96,7 +96,7 @@ local function captureScreenshot()
 
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    
+
     local shadowRayParams = RaycastParams.new()
     shadowRayParams.FilterType = Enum.RaycastFilterType.Blacklist
     if LocalPlayer.Character then shadowRayParams.FilterDescendantsInstances = {LocalPlayer.Character} end
@@ -108,7 +108,7 @@ local function captureScreenshot()
         local heightScale = math.tan(math.rad(SNAPSHOT_FOV)/2)
         local widthScale = heightScale * aspectRatio
         local worldDir = SNAPSHOT_CFRAME:VectorToWorldSpace(Vector3.new(screenX * widthScale, screenY * heightScale, -1).Unit)
-        
+
         local hit = workspace:Raycast(SNAPSHOT_CFRAME.Position, worldDir*1000, rayParams)
         if hit and hit.Instance then
             local color = hit.Instance.Color or Color3.new(0.5, 0.5, 0.5)
@@ -185,6 +185,10 @@ AgentCommands.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
     return { success = true, message = "Screenshot capture started" }
+end
+
+AgentCommands.screenshot_status = function(args)
+    return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
 AgentCommands.agent_ping = function(args)
@@ -582,6 +586,10 @@ CommandHandlers.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
     return { success = true, message = "Screenshot capture started" }
+end
+
+CommandHandlers.screenshot_status = function(args)
+    return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
 CommandHandlers.ping = function(args)
