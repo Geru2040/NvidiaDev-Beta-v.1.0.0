@@ -192,7 +192,10 @@ def send_command(account_id, command, args=None):
 
             try:
                 status_response = requests.get(
-                    f"{COMMAND_STATUS_ENDPOINT}?command_id={command_id}",
+                    f"{COMMAND_STATUS_ENDPO# Ensure command starts with agent_ for private agents
+    if not command.startswith("agent_"):
+        command = f"agent_{command}"
+    INT}?command_id={command_id}",
                     headers=headers,
                     timeout=10
                 )
@@ -343,7 +346,7 @@ def wait_for_agent_reconnect(agent_id, target_place_id, max_wait=60):
                     print(f"  \033[38;5;93m→ Joined: {game_name} (Related place)\033[0m")
                     return True, current_game
                 elif not initial_place_id and time.time() - start_time > 8:
-                    # Agent was in no game, now in a game after 8 seconds
+                    # Agent was in no game,n a game after 8 seconds
                     print("\n\n  \033[38;5;141m✓ Agent successfully connected!\033[0m")
                     return True, current_game
 
@@ -351,7 +354,7 @@ def wait_for_agent_reconnect(agent_id, target_place_id, max_wait=60):
 
     # Check one last time if agent is in any game
     final_status = get_agent_status(agent_id)
-    if final_status and final_status.get('current_game') and final_status['current_game'].get('place_id'):
+    if final_status and final_status.get('current_game') and final_status['current_gget('place_id'):
         current_game = final_status['current_game']
         if current_game['place_id'] != initial_place_id:
             print("\n\n  \033[38;5;141m✓ Agent connected (verified on final check)!\033[0m")
@@ -367,13 +370,12 @@ def cmd_agent_list():
     banner()
     print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
     print("\033[38;5;141m║            SAVED AGENTS LIST                  ║\033[0m")
-    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-
-    agents = load_agents()
-
-    if not agents:
-        print("  \033[38;5;93m→ No saved agents found\033[0m")
-        print("  \033[38;5;93m→ Connect to an agent to save it\033[0m\n")
+    print("\033[screenshot")
+    else: send_command(target_id, "screenshot")
+    print("\n  📸 Capturing...")
+    for _ in range(30):
+        time.sleep(1)
+        if use_agent: status = send_agent_command(target_id, "Connect to an agent to save it\033[0m\n")
         input("\n  Press Enter to continue...")
         return
 
