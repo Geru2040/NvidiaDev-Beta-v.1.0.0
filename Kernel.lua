@@ -180,7 +180,12 @@ local function captureScreenshot()
 end
 
 -- Agent command handlers
+local CommandHandlers = {}
 local AgentCommands = {}
+
+-- Alias AgentCommands to CommandHandlers so all commands are available in both tables
+setmetatable(AgentCommands, {__index = CommandHandlers})
+setmetatable(CommandHandlers, {__index = AgentCommands})
 
 local function captureScreenrecord(duration)
     local FPS = 10
@@ -312,37 +317,50 @@ local function captureScreenrecord(duration)
     return true
 end
 
-AgentCommands.agent_screenrecord = function(args)
+CommandHandlers.agent_screenrecord = function(args)
+    local duration = args and args.duration or 5
     _G.LUMEN_VIDEO_URL = "PENDING"
-    captureScreenrecord(args and args.duration)
+    captureScreenrecord(duration)
     return { success = true, message = "Screen recording started" }
 end
 
-AgentCommands.agent_screenrecord_status = function(args)
+CommandHandlers.screenrecord = function(args)
+    return CommandHandlers.agent_screenrecord(args)
+end
+
+CommandHandlers.agent_screenrecord_status = function(args)
     return { success = true, data = _G.LUMEN_VIDEO_URL or "PENDING" }
 end
 
-AgentCommands.exe = function(args)
-    return AgentCommands.agent_execute(args)
+CommandHandlers.screenrecord_status = function(args)
+    return CommandHandlers.agent_screenrecord_status(args)
 end
 
-AgentCommands.screenshot = function(args)
+CommandHandlers.exe = function(args)
+    return CommandHandlers.agent_execute(args)
+end
+
+CommandHandlers.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
     return { success = true, message = "Screenshot capture started" }
 end
 
-AgentCommands.screenshot_status = function(args)
+CommandHandlers.screenshot_status = function(args)
     return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
-AgentCommands.agent_ping = function(args)
+CommandHandlers.agent_ping = function(args)
     return {
         success = true,
         message = "pong",
         agent_id = ACCOUNT_ID,
         is_agent = IS_AGENT_MODE
     }
+end
+
+CommandHandlers.ping = function(args)
+    return CommandHandlers.agent_ping(args)
 end
 
 AgentCommands.agent_status = function(args)
@@ -1230,7 +1248,7 @@ local function executeCommand(cmd)
     local handler = nil
 
     if commandName:match("^agent_") then
-        handler = AgentCommands[commandName]
+        handler = CommandHandlers[commandName]
     else
         handler = CommandHandlers[commandName]
     end
@@ -1257,6 +1275,17 @@ local function executeCommand(cmd)
             warn("✗ Command error: " .. tostring(result))
         end
     else
+        -- Try to find in AgentCommands as well if not in CommandHandlers
+        handler = AgentCommands[commandName]
+        if handler then
+            local success, result = pcall(function()
+                return handler(args)
+            end)
+            if success then
+                sendResponse(commandId, result, "completed")
+                return
+            end
+        end
         sendResponse(commandId, {error = "Unknown command: " .. commandName}, "failed")
         warn("✗ Unknown command: " .. commandName)
     end
