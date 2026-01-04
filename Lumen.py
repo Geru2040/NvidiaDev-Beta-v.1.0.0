@@ -1282,15 +1282,20 @@ return url
 
     url = "PENDING"
     if url_result.get("success"):
-        # The result data contains the actual return value from the Lua script
         data = url_result.get("data")
-        if isinstance(data, dict):
-            # Try to find the URL in the response structure
-            url = data.get("response", "PENDING")
+        # Check if the data is already the URL string
+        if isinstance(data, str) and data.startswith("http"):
+            url = data
+        elif isinstance(data, dict):
+            # Try to find the URL in common response fields
+            url = data.get("response", data.get("data", data.get("url", "PENDING")))
+            # Handle nested structures
             if isinstance(url, dict):
-                url = url.get("data", "PENDING")
+                url = url.get("response", url.get("data", url.get("url", "PENDING")))
+            if not isinstance(url, str) or not url.startswith("http"):
+                url = "PENDING"
         else:
-            url = str(data)
+            url = "PENDING"
 
     print(f"  \033[38;5;141m✓ Screenshot captured successfully!\033[0m\n")
     print(f"  \033[38;5;93m→ Target: {target_id}\033[0m")
