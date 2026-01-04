@@ -212,7 +212,7 @@ local function captureScreenrecord(duration)
         local rayParams = RaycastParams.new()
         rayParams.FilterType = Enum.RaycastFilterType.Exclude
         if LocalPlayer.Character then rayParams.FilterDescendantsInstances = { LocalPlayer.Character } end
-        
+
         local vpWidth = camera.ViewportSize.X
         local vpHeight = camera.ViewportSize.Y
         local scaleX = vpWidth / RESOLUTION.width
@@ -223,7 +223,7 @@ local function captureScreenrecord(duration)
                 local vp = Vector2.new((x + 0.5) * scaleX, (y + 0.5) * scaleY)
                 local ray = camera:ViewportPointToRay(vp.X, vp.Y)
                 local hit = workspace:Raycast(ray.Origin, ray.Direction * 500, rayParams)
-                
+
                 local r, g, b = 135, 206, 235
                 if hit and hit.Instance then
                     local c = hit.Instance.Color
@@ -267,7 +267,7 @@ local function captureScreenrecord(duration)
         local frameCount = 0
         local targetInterval = 1 / FPS
         local lastFrameTime = 0
-        
+
         while frameCount < TOTAL_FRAMES do
             local elapsed = os.clock() - recordStart
             if elapsed - lastFrameTime >= targetInterval then
