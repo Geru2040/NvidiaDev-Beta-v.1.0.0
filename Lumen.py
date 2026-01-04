@@ -83,10 +83,58 @@ def add_agent_to_storage(agent_id):
     agents.append({
         'id': agent_id,
         'added_on': datetime.now().isoformat(),
-        'last_used': datetime.now().isoformat()
+        'last_used': datetime.now().isoformat(),
+        'name': None,
+        'starred': False
     })
     
     save_agents(agents)
+
+def set_agent_name(agent_id, name):
+    """Set custom name for an agent"""
+    agents = load_agents()
+    
+    for agent in agents:
+        if agent['id'] == agent_id:
+            agent['name'] = name
+            save_agents(agents)
+            return True
+    
+    return False
+
+def star_agent(agent_identifier):
+    """Star an agent by ID or name"""
+    agents = load_agents()
+    
+    # Find the target agent
+    target_agent = None
+    for agent in agents:
+        if agent['id'] == agent_identifier or (agent.get('name') and agent['name'].lower() == agent_identifier.lower()):
+            target_agent = agent
+            break
+    
+    if not target_agent:
+        return False, "Agent not found"
+    
+    # Unstar all other agents
+    for agent in agents:
+        agent['starred'] = False
+    
+    # Star the target
+    target_agent['starred'] = True
+    save_agents(agents)
+    
+    return True, target_agent
+
+def get_starred_agent():
+    """Get the currently starred agent"""
+    agents = load_agents()
+    
+    for agent in agents:
+        if agent.get('starred', False):
+            return agent
+    
+    return None
 
 def remove_agent_from_storage(agent_id):
     """Remove agent from storage"""
@@ -352,6 +400,8 @@ def cmd_agent_list():
     # Display agents with status
     for i, agent in enumerate(agents, 1):
         agent_id = agent['id']
+        agent_name = agent.get('name')
+        is_starred = agent.get('starred', False)
         
         # Safe datetime parsing
         try:
@@ -366,8 +416,10 @@ def cmd_agent_list():
         
         status = agent_statuses.get(agent_id)
         
-        # Display agent info
-        print(f"  \033[38;5;141m[{i}] Agent ID:\033[0m {agent_id}")
+        # Display agent info with star indicator
+        star_icon = "⭐ " if is_starred else ""
+        name_display = f" ({agent_name})" if agent_name else ""
+        print(f"  \033[38;5;141m[{i}] {star_icon}Agent ID:\033[0m {agent_id}{name_display}")
         print(f"      \033[38;5;93mAdded:\033[0m {added_on}")
         print(f"      \033[38;5;93mLast Used:\033[0m {last_used}")
         
@@ -427,7 +479,8 @@ def cmd_agent_list():
             agents[idx]['last_used'] = datetime.now().isoformat()
             save_agents(agents)
             
-            print(f"\n  \033[38;5;141m✓ Connected to agent {private_agent_id}\033[0m")
+            agent_display = agents[idx].get('name') or private_agent_id
+            print(f"\n  \033[38;5;141m✓ Connected to agent {agent_display}\033[0m")
             
             # Show agent status
             status = agent_statuses.get(private_agent_id)
@@ -715,6 +768,185 @@ def cmd_agent_status():
             print("  \033[38;5;196m✗ Failed to collect data\033[0m")
         
         input("\n  Press Enter to continue...")
+
+def cmd_nameagent():
+    """Name an agent"""
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║              NAME AGENT                       ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    agents = load_agents()
+    
+    if not agents:
+        print("  \033[38;5;196m✗ No saved agents found\033[0m")
+        input("\n  Press Enter to continue...")
+        return
+    
+    print("  \033[38;5;135mSaved Agents:\033[0m\n")
+    for i, agent in enumerate(agents, 1):
+        agent_name = agent.get('name')
+        name_display = f" ({agent_name})" if agent_name else ""
+        print(f"  \033[38;5;93m[{i}]\033[0m {agent['id']}{name_display}")
+    
+    print("\n  \033[38;5;93mEnter agent ID or number:\033[0m")
+    agent_input = input("  Agent → ").strip()
+    
+    if not agent_input:
+        return
+    
+    # Find agent by number or ID
+    target_agent = None
+    try:
+        agent_num = int(agent_input)
+        if 1 <= agent_num <= len(agents):
+            target_agent = agents[agent_num - 1]
+    except ValueError:
+        # Try to find by ID
+        for agent in agents:
+            if agent['id'] == agent_input:
+                target_agent = agent
+                break
+    
+    if not target_agent:
+        print("\n  \033[38;5;196m✗ Agent not found\033[0m")
+        time.sleep(1.5)
+        return
+    
+    print(f"\n  \033[38;5;135mEnter custom name for agent {target_agent['id']}:\033[0m")
+    custom_name = input("  Name → ").strip()
+    
+    if not custom_name:
+        print("\n  \033[38;5;196m✗ Name cannot be empty\033[0m")
+        time.sleep(1.5)
+        return
+    
+    if set_agent_name(target_agent['id'], custom_name):
+        print(f"\n  \033[38;5;141m✓ Agent named: {custom_name}\033[0m")
+    else:
+        print("\n  \033[38;5;196m✗ Failed to set name\033[0m")
+    
+    time.sleep(1.5)
+
+def cmd_staragent():
+    """Star/favorite an agent"""
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║              STAR AGENT                       ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    agents = load_agents()
+    
+    if not agents:
+        print("  \033[38;5;196m✗ No saved agents found\033[0m")
+        input("\n  Press Enter to continue...")
+        return
+    
+    print("  \033[38;5;135mSaved Agents:\033[0m\n")
+    for i, agent in enumerate(agents, 1):
+        agent_name = agent.get('name')
+        is_starred = agent.get('starred', False)
+        star_icon = "⭐ " if is_starred else "   "
+        name_display = f" ({agent_name})" if agent_name else ""
+        print(f"  {star_icon}\033[38;5;93m[{i}]\033[0m {agent['id']}{name_display}")
+    
+    print("\n  \033[38;5;93mEnter agent ID, name, or number to star:\033[0m")
+    agent_input = input("  Agent → ").strip()
+    
+    if not agent_input:
+        return
+    
+    # Try to find by number first
+    target_identifier = None
+    try:
+        agent_num = int(agent_input)
+        if 1 <= agent_num <= len(agents):
+            target_identifier = agents[agent_num - 1]['id']
+    except ValueError:
+        target_identifier = agent_input
+    
+    if target_identifier:
+        success, result = star_agent(target_identifier)
+        if success:
+            agent_display = result.get('name') or result['id']
+            print(f"\n  \033[38;5;141m✓ Starred agent: {agent_display} ⭐\033[0m")
+        else:
+            print(f"\n  \033[38;5;196m✗ {result}\033[0m")
+    else:
+        print("\n  \033[38;5;196m✗ Invalid input\033[0m")
+    
+    time.sleep(1.5)
+
+def cmd_agent_starlist():
+    """Show and connect to starred agent"""
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║            STARRED AGENT                      ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    
+    starred = get_starred_agent()
+    
+    if not starred:
+        print("  \033[38;5;196m✗ No agent is currently starred\033[0m")
+        print("  \033[38;5;93m→ Use 'staragent' to mark a favorite agent\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+    
+    agent_id = starred['id']
+    agent_name = starred.get('name')
+    
+    print("  \033[38;5;141m⭐ Starred Agent:\033[0m\n")
+    
+    name_display = f" ({agent_name})" if agent_name else ""
+    print(f"  \033[38;5;135mAgent ID:\033[0m {agent_id}{name_display}")
+    
+    try:
+        added_on = datetime.fromisoformat(starred['added_on']).strftime("%Y-%m-%d %H:%M")
+        print(f"  \033[38;5;93mAdded:\033[0m {added_on}")
+    except:
+        pass
+    
+    try:
+        last_used = datetime.fromisoformat(starred['last_used']).strftime("%Y-%m-%d %H:%M")
+        print(f"  \033[38;5;93mLast Used:\033[0m {last_used}")
+    except:
+        pass
+    
+    print("\n  \033[38;5;93m→ Checking status...\033[0m")
+    status = get_agent_status_fast(agent_id)
+    
+    if status:
+        print(f"  \033[38;5;141m✓ Status: ONLINE\033[0m")
+        if status.get('current_game'):
+            game = status['current_game']
+            print(f"  \033[38;5;135m📍 Game:\033[0m {game.get('name', 'Unknown')}")
+    else:
+        print(f"  \033[38;5;196m✗ Status: OFFLINE\033[0m")
+    
+    print("\n  \033[38;5;93m" + "─"*45 + "\033[0m\n")
+    print("  \033[38;5;93m[1]\033[0m Connect to this agent")
+    print("  \033[38;5;93m[2]\033[0m Back\n")
+    
+    choice = input("  Select → ").strip()
+    
+    if choice == "1":
+        global private_agent_id
+        private_agent_id = agent_id
+        
+        # Update last_used
+        agents = load_agents()
+        for agent in agents:
+            if agent['id'] == agent_id:
+                agent['last_used'] = datetime.now().isoformat()
+                save_agents(agents)
+                break
+        
+        agent_display = agent_name or agent_id
+        print(f"\n  \033[38;5;141m✓ Connected to starred agent: {agent_display}\033[0m")
+        time.sleep(2)
 
 def cmd_runport():
     """Establish connection with client"""
@@ -1258,8 +1490,11 @@ def main():
         print("\n  \033[38;5;135mAGENT COMMANDS:\033[0m")
         print("  \033[38;5;141m• agent\033[0m         → Setup private agent")
         print("  \033[38;5;141m• agent --list\033[0m  → List saved agents")
+        print("  \033[38;5;141m• agent --starlist\033[0m → View starred agent")
         print("  \033[38;5;141m• attach\033[0m        → Attach agent to game")
         print("  \033[38;5;141m• agentstatus\033[0m   → View agent status")
+        print("  \033[38;5;141m• nameagent\033[0m     → Name an agent")
+        print("  \033[38;5;141m• staragent\033[0m     → Star favorite agent")
         
         print("\n  \033[38;5;93m• exit\033[0m          → Exit Lumen")
         print("\n  ───────────────────────────────────────────\n")
@@ -1289,10 +1524,16 @@ def main():
             cmd_agent()
         elif choice == "agent --list":
             cmd_agent_list()
+        elif choice == "agent --starlist":
+            cmd_agent_starlist()
         elif choice == "attach":
             cmd_attach()
         elif choice == "agentstatus":
             cmd_agent_status()
+        elif choice == "nameagent":
+            cmd_nameagent()
+        elif choice == "staragent":
+            cmd_staragent()
         else:
             print("\n  ✗ Invalid option")
             time.sleep(1)
