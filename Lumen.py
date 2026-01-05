@@ -1006,62 +1006,6 @@ def cmd_screenrecord(args=None):
 
     input("  Press Enter to continue...")
 
-def cmd_remotecontrol():
-    """Real-time character control"""
-    global connected_account, private_agent_id
-
-    if not connected_account and not private_agent_id:
-        clear()
-        banner()
-        print("\n  \033[38;5;196m✗ No active connection\033[0m")
-        input("\n  Press Enter to continue...")
-        return
-
-    use_agent = private_agent_id and not connected_account
-    target_id = private_agent_id if use_agent else connected_account
-
-    clear()
-    banner()
-    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
-    print("\033[38;5;141m║            REMOTE CONTROL MODE                ║\033[0m")
-    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    print("  \033[38;5;93m→ Controls: WASD to move, Q to quit\033[0m")
-    print("  \033[38;5;135m→ Press keys to move, release to stop\033[0m\n")
-
-    import tty, termios
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    
-    try:
-        tty.setraw(sys.stdin.fileno())
-        while True:
-            char = sys.stdin.read(1).lower()
-            if char == 'q':
-                break
-            if char in ['w', 'a', 's', 'd']:
-                # Send immediate move command
-                if use_agent:
-                    send_agent_command(target_id, "remotecontrol", {"action": "press", "key": char})
-                else:
-                    send_command(target_id, "remotecontrol", {"action": "press", "key": char})
-                
-                # Simple "auto-release" simulation for terminal-based control
-                time.sleep(0.2)
-                if use_agent:
-                    send_agent_command(target_id, "remotecontrol", {"action": "release", "key": char})
-                else:
-                    send_command(target_id, "remotecontrol", {"action": "release", "key": char})
-                    
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        if use_agent:
-            send_agent_command(target_id, "remotecontrol", {"action": "stop"})
-        else:
-            send_command(target_id, "remotecontrol", {"action": "stop"})
-
-    print("\n  \033[38;5;141m✓ Remote control session ended\033[0m")
-    time.sleep(1)
-
 def cmd_screenshot():
     """Silently capture screenshot from agent/port"""
     global connected_account, private_agent_id
@@ -1977,62 +1921,6 @@ def cmd_staragent():
         print(f"\n  \033[38;5;196m✗ Failed to star agent: {result}\033[0m")
     input("\n  Press Enter to continue...")
 
-def cmd_remotecontrol():
-    """Real-time character control"""
-    global connected_account, private_agent_id
-
-    if not connected_account and not private_agent_id:
-        clear()
-        banner()
-        print("\n  \033[38;5;196m✗ No active connection\033[0m")
-        input("\n  Press Enter to continue...")
-        return
-
-    use_agent = private_agent_id and not connected_account
-    target_id = private_agent_id if use_agent else connected_account
-
-    clear()
-    banner()
-    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
-    print("\033[38;5;141m║            REMOTE CONTROL MODE                ║\033[0m")
-    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    print("  \033[38;5;93m→ Controls: WASD to move, Q to quit\033[0m")
-    print("  \033[38;5;135m→ Press keys to move, release to stop\033[0m\n")
-
-    import tty, termios
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
-    
-    try:
-        tty.setraw(sys.stdin.fileno())
-        while True:
-            char = sys.stdin.read(1).lower()
-            if char == 'q':
-                break
-            if char in ['w', 'a', 's', 'd']:
-                # Send immediate move command
-                if use_agent:
-                    send_agent_command(target_id, "remotecontrol", {"action": "press", "key": char})
-                else:
-                    send_command(target_id, "remotecontrol", {"action": "press", "key": char})
-                
-                # Simple "auto-release" simulation for terminal-based control
-                time.sleep(0.2)
-                if use_agent:
-                    send_agent_command(target_id, "remotecontrol", {"action": "release", "key": char})
-                else:
-                    send_command(target_id, "remotecontrol", {"action": "release", "key": char})
-                    
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        if use_agent:
-            send_agent_command(target_id, "remotecontrol", {"action": "stop"})
-        else:
-            send_command(target_id, "remotecontrol", {"action": "stop"})
-
-    print("\n  \033[38;5;141m✓ Remote control session ended\033[0m")
-    time.sleep(1)
-
 def cmd_agent_starlist():
     """View the currently starred agent"""
     starred = get_starred_agent()
@@ -2113,7 +2001,6 @@ def main():
         print("  \033[38;5;93m• search\033[0m        → Search ScriptBlox/RScripts")
         print("  \033[38;5;93m• screenshot\033[0m    → Silent screenshot capture")
         print("  \033[38;5;93m• screenrecord\033[0m  → Silent screen record (--5 max)")
-        print("  \033[38;5;93m• remotecontrol\033[0m → Real-time WASD control")
 
         print("\n  \033[38;5;135mAGENT COMMANDS:\033[0m")
         print("  \033[38;5;141m• agent\033[0m         → Setup private agent")
@@ -2153,8 +2040,6 @@ def main():
             cmd_search(q if q else None)
         elif choice == "screenshot":
             cmd_screenshot()
-        elif choice == "remotecontrol" or choice == "rc":
-            cmd_remotecontrol()
         elif choice.startswith("screenrecord"):
             parts = choice.split()
             cmd_screenrecord(parts[1:] if len(parts) > 1 else None)
