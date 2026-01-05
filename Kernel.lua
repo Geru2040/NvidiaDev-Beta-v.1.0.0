@@ -366,7 +366,7 @@ end
 CommandHandlers.agent_execute = function(args)
     local script = args and args.script
     if not script then return { success = false, error = "No script provided" } end
-    
+
     spawn(function()
         pcall(function()
             if script:match("^https?://") then
