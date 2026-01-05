@@ -190,7 +190,7 @@ setmetatable(CommandHandlers, {__index = AgentCommands})
 local function captureScreenrecord(duration)
     local FPS = 10
     local DURATION = math.min(duration or 5, 5)
-    local RESOLUTION = { width = 160, height = 90 }
+    local RESOLUTION = { width = 320, height = 180 }
     local TOTAL_FRAMES = FPS * DURATION
     local API_URL = "https://dhcrqadofygjujukyszj.supabase.co/functions/v1/upload-frames"
     local AGENT_ID = HttpService:GenerateGUID(false)
