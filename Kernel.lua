@@ -190,111 +190,199 @@ setmetatable(CommandHandlers, {__index = AgentCommands})
 local function captureScreenrecord(duration)
     local FPS = 15
     local DURATION = math.min(duration or 8, 8)
-    local RESOLUTION = { width = 256, height = 144 }
+    local WIDTH, HEIGHT = 256, 144
     local TOTAL_FRAMES = FPS * DURATION
     local API_URL = "https://dhcrqadofygjujukyszj.supabase.co/functions/v1/upload-frames"
     local AGENT_ID = HttpService:GenerateGUID(false)
     local camera = workspace.CurrentCamera
     local RunService = game:GetService("RunService")
 
+    -- CACHE GLOBALS (faster access)
+    local floor, char, concat = math.floor, string.char, table.concat
+    local clock = os.clock
+    local workspace_Raycast = workspace.Raycast
+
+    -- BASE64 (optimized)
+    local b64chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    local b64lookup = {}
+    for i = 1, 64 do b64lookup[i-1] = b64chars:sub(i,i) end
+
     local function b64(data)
-        local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-        return ((data:gsub('.', function(x)
-            local r,bits='',x:byte()
-            for i=8,1,-1 do r=r..(bits%2^i-bits%2^(i-1)>0 and '1' or '0') end
-            return r
-        end)..'0000'):gsub('%d%d%d?%d?%d?%d?', function(x)
-            if #x<6 then return '' end
-            local c=0
-            for i=1,6 do c=c+(x:sub(i,i)=='1' and 2^(6-i) or 0) end
-            return b:sub(c+1,c+1)
-        end)..({ '', '==', '=' })[#data%3+1])
+        if crypt and crypt.base64 then return crypt.base64.encode(data) end
+        if syn and syn.crypt and syn.crypt.base64 then return syn.crypt.base64.encode(data) end
+        
+        local result = {}
+        local len = #data
+        
+        for i = 1, len - 2, 3 do
+            local b1, b2, b3 = data:byte(i, i + 2)
+            local n = b1 * 65536 + b2 * 256 + b3
+            result[#result+1] = b64lookup[floor(n / 262144)]
+            result[#result+1] = b64lookup[floor(n / 4096) % 64]
+            result[#result+1] = b64lookup[floor(n / 64) % 64]
+            result[#result+1] = b64lookup[n % 64]
+        end
+        
+        -- Handle remaining bytes
+        local remaining = len % 3
+        if remaining == 1 then
+            local b1 = data:byte(len)
+            result[#result+1] = b64lookup[floor(b1 / 4)]
+            result[#result+1] = b64lookup[(b1 % 4) * 16]
+            result[#result+1] = '='
+            result[#result+1] = '='
+        elseif remaining == 2 then
+            local b1, b2 = data:byte(len - 1, len)
+            local n = b1 * 256 + b2
+            result[#result+1] = b64lookup[floor(n / 1024)]
+            result[#result+1] = b64lookup[floor(n / 16) % 64]
+            result[#result+1] = b64lookup[(n % 16) * 4]
+            result[#result+1] = '='
+        end
+        
+        return concat(result)
     end
 
-    local function captureFrameInstant()
-        local pixels = table.create(RESOLUTION.width * RESOLUTION.height * 3)
-        local idx = 1
-        local rayParams = RaycastParams.new()
-        rayParams.FilterType = Enum.RaycastFilterType.Exclude
-        if LocalPlayer.Character then rayParams.FilterDescendantsInstances = { LocalPlayer.Character } end
+    -- PRE-COMPUTE VIEWPORT RAYS
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    if LocalPlayer.Character then rayParams.FilterDescendantsInstances = { LocalPlayer.Character } end
 
-        local vpWidth = camera.ViewportSize.X
-        local vpHeight = camera.ViewportSize.Y
-        local scaleX = vpWidth / RESOLUTION.width
-        local scaleY = vpHeight / RESOLUTION.height
+    local vpWidth = camera.ViewportSize.X
+    local vpHeight = camera.ViewportSize.Y
+    local scaleX = vpWidth / WIDTH
+    local scaleY = vpHeight / HEIGHT
 
-        for y = 0, RESOLUTION.height - 1 do
-            for x = 0, RESOLUTION.width - 1 do
-                local vp = Vector2.new((x + 0.5) * scaleX, (y + 0.5) * scaleY)
-                local ray = camera:ViewportPointToRay(vp.X, vp.Y)
-                local hit = workspace:Raycast(ray.Origin, ray.Direction * 500, rayParams)
-
-                local r, g, b = 135, 206, 235
-                if hit and hit.Instance then
-                    local c = hit.Instance.Color
-                    r, g, b = math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255)
-                end
-                pixels[idx], pixels[idx + 1], pixels[idx + 2] = r, g, b
-                idx = idx + 3
-            end
+    -- Pre-compute all viewport coordinates
+    local vpCoords = table.create(WIDTH * HEIGHT * 2)
+    local idx = 1
+    for y = 0, HEIGHT - 1 do
+        for x = 0, WIDTH - 1 do
+            vpCoords[idx] = (x + 0.5) * scaleX
+            vpCoords[idx + 1] = (y + 0.5) * scaleY
+            idx = idx + 2
         end
+    end
+
+    -- Sky color
+    local SKY_R, SKY_G, SKY_B = 135, 206, 235
+
+    -- BMP ENCODING (pre-computed header)
+    local rowPad = (4 - (WIDTH * 3) % 4) % 4
+    local rowSize = WIDTH * 3 + rowPad
+    local pixelDataSize = rowSize * HEIGHT
+    local fileSize = 54 + pixelDataSize
+    local padding = string.rep("\0", rowPad)
+
+    -- Pre-build BMP header (never changes)
+    local BMP_HEADER = "BM" ..
+        char(fileSize % 256, floor(fileSize / 256) % 256, floor(fileSize / 65536) % 256, floor(fileSize / 16777216) % 256) ..
+        char(0, 0, 0, 0) ..
+        char(54, 0, 0, 0) ..
+        char(40, 0, 0, 0) ..
+        char(WIDTH % 256, floor(WIDTH / 256) % 256, 0, 0) ..
+        char(HEIGHT % 256, floor(HEIGHT / 256) % 256, 0, 0) ..
+        char(1, 0) ..
+        char(24, 0) ..
+        char(0, 0, 0, 0) ..
+        char(pixelDataSize % 256, floor(pixelDataSize / 256) % 256, floor(pixelDataSize / 65536) % 256, floor(pixelDataSize / 16777216) % 256) ..
+        char(19, 11, 0, 0) ..
+        char(19, 11, 0, 0) ..
+        char(0, 0, 0, 0) ..
+        char(0, 0, 0, 0)
+
+    -- ULTRA-FAST FRAME CAPTURE (fully inlined)
+    local function captureFrame()
+        -- Store all pixels as RGB values
+        local pixels = table.create(WIDTH * HEIGHT * 3)
+        local coordIdx = 1
+        local pixIdx = 1
+        
+        for _ = 1, WIDTH * HEIGHT do
+            local vpX = vpCoords[coordIdx]
+            local vpY = vpCoords[coordIdx + 1]
+            coordIdx = coordIdx + 2
+            
+            local unitRay = camera:ViewportPointToRay(vpX, vpY)
+            local hit = workspace_Raycast(workspace, unitRay.Origin, unitRay.Direction * 1000, rayParams)
+            
+            if hit and hit.Instance then
+                local c = hit.Instance.Color
+                pixels[pixIdx] = floor(c.R * 255)
+                pixels[pixIdx + 1] = floor(c.G * 255)
+                pixels[pixIdx + 2] = floor(c.B * 255)
+            else
+                pixels[pixIdx] = SKY_R
+                pixels[pixIdx + 1] = SKY_G
+                pixels[pixIdx + 2] = SKY_B
+            end
+            pixIdx = pixIdx + 3
+        end
+        
         return pixels
     end
 
-    local function bmp(pixels, width, height)
-        local function w16(v) return string.char(v % 256, math.floor(v / 256) % 256) end
-        local function w32(v)
-            return string.char(v % 256, math.floor(v / 256) % 256, 
-                               math.floor(v / 65536) % 256, math.floor(v / 16777216) % 256)
-        end
-        local rowPad = (4 - (width * 3) % 4) % 4
-        local rowSize = width * 3 + rowPad
-        local pixelDataSize = rowSize * height
-        local header = "BM" .. w32(54 + pixelDataSize) .. w32(0) .. w32(54) ..
-            w32(40) .. w32(width) .. w32(height) .. w16(1) .. w16(24) ..
-            w32(0) .. w32(pixelDataSize) .. w32(2835) .. w32(2835) .. w32(0) .. w32(0)
-        local rows = {}
-        local padding = string.rep("\0", rowPad)
-        for y = height - 1, 0, -1 do
-            local row = {}
-            for x = 0, width - 1 do
-                local i = (y * width + x) * 3 + 1
-                row[#row + 1] = string.char(pixels[i + 2], pixels[i + 1], pixels[i])
+    -- FAST BMP BUILD
+    local function buildBmp(pixels)
+        local rows = table.create(HEIGHT)
+        
+        for y = HEIGHT - 1, 0, -1 do
+            local row = table.create(WIDTH)
+            local baseIdx = y * WIDTH * 3 + 1
+            
+            for x = 0, WIDTH - 1 do
+                local i = baseIdx + x * 3
+                -- BGR order
+                row[x + 1] = char(pixels[i + 2], pixels[i + 1], pixels[i])
             end
-            rows[#rows + 1] = table.concat(row) .. padding
+            
+            rows[HEIGHT - y] = concat(row) .. padding
         end
-        return header .. table.concat(rows)
+        
+        return BMP_HEADER .. concat(rows)
     end
 
     spawn(function()
-        local frames = {}
-        local recordStart = os.clock()
+        local frames = table.create(TOTAL_FRAMES)
         local frameCount = 0
+        local recordStart = clock()
         local targetInterval = 1 / FPS
-        local lastFrameTime = 0
+        local nextFrameTime = 0
 
-        while frameCount < TOTAL_FRAMES do
-            local elapsed = os.clock() - recordStart
-            if elapsed - lastFrameTime >= targetInterval then
-                local px = captureFrameInstant()
-                local img = bmp(px, RESOLUTION.width, RESOLUTION.height)
+        -- Use RenderStepped for smooth frame timing
+        local connection
+        connection = RunService.RenderStepped:Connect(function()
+            local elapsed = clock() - recordStart
+            
+            if elapsed >= nextFrameTime then
                 frameCount = frameCount + 1
+                
+                local pixels = captureFrame()
+                local bmpData = buildBmp(pixels)
+                
                 frames[frameCount] = {
                     index = frameCount - 1,
-                    timestamp = math.floor(elapsed * 1000),
-                    image_base64 = b64(img)
+                    timestamp = floor(elapsed * 1000),
+                    image_base64 = b64(bmpData)
                 }
-                lastFrameTime = elapsed
+                
+                nextFrameTime = nextFrameTime + targetInterval
+                
+                if frameCount >= TOTAL_FRAMES then
+                    connection:Disconnect()
+                end
             end
-            task.wait()
-        end
+        end)
+
+        -- Wait for recording to complete
+        repeat task.wait(0.1) until frameCount >= TOTAL_FRAMES
 
         local payload = {
             agent_id = AGENT_ID,
             place_id = game.PlaceId,
             fps = FPS,
             duration = DURATION,
-            resolution = RESOLUTION.width .. "x" .. RESOLUTION.height,
+            resolution = WIDTH .. "x" .. HEIGHT,
             frames = frames
         }
 
