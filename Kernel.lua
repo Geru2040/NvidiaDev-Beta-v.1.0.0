@@ -179,23 +179,21 @@ local function captureScreenshot()
     return true
 end
 
+-- Standardized command table
+local Commands = {}
+
 -- Agent command handlers
-local CommandHandlers = {}
-local AgentCommands = {}
-
--- Alias AgentCommands to CommandHandlers so all commands are available in both tables
-setmetatable(AgentCommands, {__index = CommandHandlers})
-setmetatable(CommandHandlers, {__index = AgentCommands})
-
 local function captureScreenrecord(duration)
     local FPS = 10
-    local DURATION = math.min(duration or 5, 5)
+    local DURATION = math.min(duration or 5, 8) -- Increased max duration slightly
     local RESOLUTION = { width = 160, height = 90 }
     local TOTAL_FRAMES = FPS * DURATION
     local API_URL = "https://dhcrqadofygjujukyszj.supabase.co/functions/v1/upload-frames"
     local AGENT_ID = HttpService:GenerateGUID(false)
     local camera = workspace.CurrentCamera
     local RunService = game:GetService("RunService")
+
+    print("🎬 Starting record: " .. DURATION .. "s @ " .. FPS .. " FPS")
 
     local function b64(data)
         local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
@@ -245,7 +243,7 @@ local function captureScreenrecord(duration)
         local function w16(v) return string.char(v % 256, math.floor(v / 256) % 256) end
         local function w32(v)
             return string.char(v % 256, math.floor(v / 256) % 256, 
-                               math.floor(v / 65536) % 256, math.floor(v / 16777216) % 256)
+                               math.floor(v / 65536) % 256, math.floor(v / 17677216) % 256)
         end
         local rowPad = (4 - (width * 3) % 4) % 4
         local rowSize = width * 3 + rowPad
@@ -285,10 +283,12 @@ local function captureScreenrecord(duration)
                     image_base64 = b64(img)
                 }
                 lastFrameTime = elapsed
+                print("📸 Frame " .. frameCount .. "/" .. TOTAL_FRAMES)
             end
             task.wait()
         end
 
+        print("📤 Uploading frames...")
         local payload = {
             agent_id = AGENT_ID,
             place_id = game.PlaceId,
@@ -310,47 +310,49 @@ local function captureScreenrecord(duration)
         if success and (result.Success or result.StatusCode == 200) then
             local data = HttpService:JSONDecode(result.Body)
             _G.LUMEN_VIDEO_URL = data.video_url
+            print("✅ Upload success: " .. data.video_url)
         else
-            _G.LUMEN_VIDEO_URL = "ERROR"
+            local errMsg = "Upload failed"
+            if not success then errMsg = tostring(result)
+            elseif result then errMsg = "HTTP " .. tostring(result.StatusCode) .. ": " .. tostring(result.Body) end
+            _G.LUMEN_VIDEO_URL = "ERROR: " .. errMsg
+            warn("❌ " .. errMsg)
         end
     end)
     return true
 end
 
-CommandHandlers.agent_screenrecord = function(args)
+Commands.agent_screenrecord = function(args)
     local duration = args and args.duration or 5
     _G.LUMEN_VIDEO_URL = "PENDING"
-    captureScreenrecord(duration)
+    local ok, err = pcall(function() captureScreenrecord(duration) end)
+    if not ok then return { success = false, error = tostring(err) } end
     return { success = true, message = "Screen recording started" }
 end
 
-CommandHandlers.screenrecord = function(args)
-    return CommandHandlers.agent_screenrecord(args)
-end
+Commands.screenrecord = Commands.agent_screenrecord
 
-CommandHandlers.agent_screenrecord_status = function(args)
+Commands.agent_screenrecord_status = function(args)
     return { success = true, data = _G.LUMEN_VIDEO_URL or "PENDING" }
 end
 
-CommandHandlers.screenrecord_status = function(args)
-    return CommandHandlers.agent_screenrecord_status(args)
+Commands.screenrecord_status = Commands.agent_screenrecord_status
+
+Commands.exe = function(args)
+    return Commands.agent_execute(args)
 end
 
-CommandHandlers.exe = function(args)
-    return CommandHandlers.agent_execute(args)
-end
-
-CommandHandlers.screenshot = function(args)
+Commands.screenshot = function(args)
     _G.LUMEN_SCREENSHOT_URL = "PENDING"
     captureScreenshot()
     return { success = true, message = "Screenshot capture started" }
 end
 
-CommandHandlers.screenshot_status = function(args)
+Commands.screenshot_status = function(args)
     return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
-CommandHandlers.agent_ping = function(args)
+Commands.agent_ping = function(args)
     return {
         success = true,
         message = "pong",
@@ -359,11 +361,9 @@ CommandHandlers.agent_ping = function(args)
     }
 end
 
-CommandHandlers.ping = function(args)
-    return CommandHandlers.agent_ping(args)
-end
+Commands.ping = Commands.agent_ping
 
-CommandHandlers.agent_execute = function(args)
+Commands.agent_execute = function(args)
     local script = args and args.script
     if not script then return { success = false, error = "No script provided" } end
 
@@ -379,7 +379,7 @@ CommandHandlers.agent_execute = function(args)
     return { success = true, message = "Script executed" }
 end
 
-AgentCommands.agent_status = function(args)
+Commands.agent_status = function(args)
     local currentGame = nil
 
     pcall(function()
@@ -401,7 +401,7 @@ AgentCommands.agent_status = function(args)
     }
 end
 
-AgentCommands.agent_attach = function(args)
+Commands.agent_attach = function(args)
     local placeId = args and args.place_id
     local autoScript = args and args.auto_script
 
@@ -750,7 +750,7 @@ AgentCommands.agent_collect_data = function(args)
     }
 end
 
-AgentCommands.agent_disconnect = function(args)
+Commands.agent_disconnect = function(args)
     IS_AGENT_MODE = false
     return {
         success = true,
@@ -1261,7 +1261,7 @@ local function executeCommand(cmd)
 
     print("⚡ Executing command: " .. commandName)
 
-    local handler = CommandHandlers[commandName] or AgentCommands[commandName]
+    local handler = Commands[commandName]
 
     if handler then
         local success, result = pcall(function()
