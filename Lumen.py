@@ -953,6 +953,25 @@ def cmd_screenrecord(args=None):
     print(f"  \033[38;5;141m✓ Recording started successfully\033[0m")
     print(f"  \033[38;5;93m→ Waiting for processing and upload...\033[0m\n")
 
+    # Extract URL helper
+    def extract_url(val):
+        if not val: return None
+        if isinstance(val, str):
+            val = val.strip()
+            if val.startswith("http"): return val
+            if val.startswith("ERROR"): return val
+            return None
+        if isinstance(val, dict):
+            # Check common response fields
+            for k in ["response", "result", "url", "data", "message"]:
+                res = extract_url(val.get(k))
+                if res: return res
+            # Check values directly
+            for v in val.values():
+                res = extract_url(v)
+                if res: return res
+        return None
+
     # Poll status
     max_attempts = 120
     url = "PENDING"
@@ -964,11 +983,9 @@ def cmd_screenrecord(args=None):
         check_result = send_agent_command(private_agent_id, "agent_screenrecord_status")
         if check_result.get("success"):
             data = check_result.get("data")
-            if data and data != "PENDING":
-                if "ERROR" not in data:
-                    url = data
-                else:
-                    url = f"ERROR: {data}"
+            found_url = extract_url(data)
+            if found_url:
+                url = found_url
                 break
 
     clear()
