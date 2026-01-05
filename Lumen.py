@@ -943,7 +943,8 @@ def cmd_screenrecord(args=None):
     print(f"  \033[38;5;135m→ Initiating silent record ({duration}s)...\033[0m")
     print(f"  \033[38;5;93m→ This may take a minute...\033[0m\n")
 
-    result = send_agent_command(private_agent_id, "agent_screenrecord", {"duration": duration})
+    # Call the pre-defined Lua function in agent.lua
+    result = send_agent_command(private_agent_id, "screenrecord", {"duration": duration})
 
     if not result.get("success"):
         print(f"\n  \033[38;5;196m✗ Failed to initiate recording\033[0m")
@@ -961,7 +962,7 @@ def cmd_screenrecord(args=None):
         print(f"  \033[38;5;135m⏳ Processing{dots}\033[0m", end='\r', flush=True)
         time.sleep(1)
 
-        check_result = send_agent_command(private_agent_id, "agent_screenrecord_status")
+        check_result = send_agent_command(private_agent_id, "screenrecord_status")
         if check_result.get("success"):
             data = check_result.get("data")
             if data and data != "PENDING":
@@ -1016,9 +1017,9 @@ def cmd_screenshot():
 
     # Call the pre-defined Lua function in agent.lua
     if use_agent:
-        result = send_agent_command(target_id, "screenshot")
+        result = send_agent_command(target_id, "screenrecord", {"duration": duration})
     else:
-        result = send_command(target_id, "screenshot")
+        result = send_command(target_id, "screenrecord", {"duration": duration})
 
     if not result.get("success"):
         print(f"\n  \033[38;5;196m✗ Failed to initiate capture\033[0m")
