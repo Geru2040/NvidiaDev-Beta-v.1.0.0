@@ -182,6 +182,19 @@ end
 -- Standardized command table
 local Commands = {}
 
+-- --- command aliases / typos ---
+Commands.clear = function()
+    -- best-effort “clear”
+    if rconsoleclear then rconsoleclear()
+    elseif consoleclear then consoleclear()
+    else
+        for _ = 1, 40 do print("") end
+    end
+    return { success = true, message = "cleared" }
+end
+
+Commands.cleat = Commands.clear -- handle the typo you see in console
+
 -- Agent command handlers
 local function captureScreenrecord(duration)
     local FPS = 10
@@ -1253,9 +1266,10 @@ local function pollCommands()
     end
 end
 
--- Smart command dispatcher
+-- Smart command dispatcher (fixed: trims command name)
 local function executeCommand(cmd)
-    local commandName = cmd.command
+    local rawName = tostring(cmd.command or "")
+    local commandName = rawName:match("^%s*(.-)%s*$") -- trims spaces/newlines
     local commandId = cmd.id
     local args = cmd.args or {}
 
@@ -1277,16 +1291,16 @@ local function executeCommand(cmd)
                 warn("✗ Command failed: " .. commandName)
                 warn("  Error: " .. tostring(result.error))
             else
-                sendResponse(commandId, {error = "No result returned"}, "failed")
+                sendResponse(commandId, { error = "No result returned" }, "failed")
                 warn("✗ Command returned no result: " .. commandName)
             end
         else
-            sendResponse(commandId, {error = tostring(result)}, "failed")
+            sendResponse(commandId, { error = tostring(result) }, "failed")
             warn("✗ Command error: " .. tostring(result))
         end
     else
-        sendResponse(commandId, {error = "Unknown command: " .. commandName}, "failed")
-        warn("✗ Unknown command: " .. commandName)
+        sendResponse(commandId, { error = "Unknown command: " .. commandName, raw = rawName }, "failed")
+        warn("✗ Unknown command: " .. commandName .. " (raw=" .. rawName .. ")")
     end
 end
 
