@@ -1015,10 +1015,7 @@ def cmd_screenshot():
     print(f"  \033[38;5;93m→ This may take 30-60 seconds...\033[0m\n")
 
     # Call the pre-defined Lua function in agent.lua
-    if use_agent:
-        result = send_agent_command(target_id, "agent_screenrecord", {"duration": duration})
-    else:
-        result = send_command(target_id, "agent_screenrecord", {"duration": duration})
+    result = send_agent_command(private_agent_id, "agent_screenrecord", {"duration": duration})
 
     if not result.get("success"):
         print(f"\n  \033[38;5;196m✗ Failed to initiate capture\033[0m")
