@@ -56,7 +56,7 @@ local function startAntiAFK()
     end)
 end
 
--- Global screenshot URL storage
+-- Global screenshot/video URL storage
 _G.LUMEN_SCREENSHOT_URL = nil
 _G.LUMEN_VIDEO_URL = nil
 
@@ -179,34 +179,15 @@ local function captureScreenshot()
     return true
 end
 
--- Standardized command table
-local Commands = {}
-
--- --- command aliases / typos ---
-Commands.clear = function()
-    -- best-effort “clear”
-    if rconsoleclear then rconsoleclear()
-    elseif consoleclear then consoleclear()
-    else
-        for _ = 1, 40 do print("") end
-    end
-    return { success = true, message = "cleared" }
-end
-
-Commands.cleat = Commands.clear -- handle the typo you see in console
-
--- Agent command handlers
 local function captureScreenrecord(duration)
     local FPS = 10
-    local DURATION = math.min(duration or 5, 8) -- Increased max duration slightly
+    local DURATION = math.min(duration or 5, 5)
     local RESOLUTION = { width = 160, height = 90 }
     local TOTAL_FRAMES = FPS * DURATION
     local API_URL = "https://dhcrqadofygjujukyszj.supabase.co/functions/v1/upload-frames"
     local AGENT_ID = HttpService:GenerateGUID(false)
     local camera = workspace.CurrentCamera
     local RunService = game:GetService("RunService")
-
-    print("🎬 Starting record: " .. DURATION .. "s @ " .. FPS .. " FPS")
 
     local function b64(data)
         local b='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
@@ -228,7 +209,7 @@ local function captureScreenrecord(duration)
         local rayParams = RaycastParams.new()
         rayParams.FilterType = Enum.RaycastFilterType.Exclude
         if LocalPlayer.Character then rayParams.FilterDescendantsInstances = { LocalPlayer.Character } end
-
+        
         local vpWidth = camera.ViewportSize.X
         local vpHeight = camera.ViewportSize.Y
         local scaleX = vpWidth / RESOLUTION.width
@@ -239,7 +220,7 @@ local function captureScreenrecord(duration)
                 local vp = Vector2.new((x + 0.5) * scaleX, (y + 0.5) * scaleY)
                 local ray = camera:ViewportPointToRay(vp.X, vp.Y)
                 local hit = workspace:Raycast(ray.Origin, ray.Direction * 500, rayParams)
-
+                
                 local r, g, b = 135, 206, 235
                 if hit and hit.Instance then
                     local c = hit.Instance.Color
@@ -256,7 +237,7 @@ local function captureScreenrecord(duration)
         local function w16(v) return string.char(v % 256, math.floor(v / 256) % 256) end
         local function w32(v)
             return string.char(v % 256, math.floor(v / 256) % 256, 
-                               math.floor(v / 65536) % 256, math.floor(v / 17677216) % 256)
+                               math.floor(v / 65536) % 256, math.floor(v / 16777216) % 256)
         end
         local rowPad = (4 - (width * 3) % 4) % 4
         local rowSize = width * 3 + rowPad
@@ -283,7 +264,7 @@ local function captureScreenrecord(duration)
         local frameCount = 0
         local targetInterval = 1 / FPS
         local lastFrameTime = 0
-
+        
         while frameCount < TOTAL_FRAMES do
             local elapsed = os.clock() - recordStart
             if elapsed - lastFrameTime >= targetInterval then
@@ -296,12 +277,10 @@ local function captureScreenrecord(duration)
                     image_base64 = b64(img)
                 }
                 lastFrameTime = elapsed
-                print("📸 Frame " .. frameCount .. "/" .. TOTAL_FRAMES)
             end
             task.wait()
         end
 
-        print("📤 Uploading frames...")
         local payload = {
             agent_id = AGENT_ID,
             place_id = game.PlaceId,
@@ -323,49 +302,27 @@ local function captureScreenrecord(duration)
         if success and (result.Success or result.StatusCode == 200) then
             local data = HttpService:JSONDecode(result.Body)
             _G.LUMEN_VIDEO_URL = data.video_url
-            print("✅ Upload success: " .. data.video_url)
         else
-            local errMsg = "Upload failed"
-            if not success then errMsg = tostring(result)
-            elseif result then errMsg = "HTTP " .. tostring(result.StatusCode) .. ": " .. tostring(result.Body) end
-            _G.LUMEN_VIDEO_URL = "ERROR: " .. errMsg
-            warn("❌ " .. errMsg)
+            _G.LUMEN_VIDEO_URL = "ERROR"
         end
     end)
     return true
 end
 
-Commands.agent_screenrecord = function(args)
-    local duration = args and args.duration or 5
+-- Agent command handlers
+local AgentCommands = {}
+
+AgentCommands.agent_screenrecord = function(args)
     _G.LUMEN_VIDEO_URL = "PENDING"
-    local ok, err = pcall(function() captureScreenrecord(duration) end)
-    if not ok then return { success = false, error = tostring(err) } end
+    captureScreenrecord(args and args.duration)
     return { success = true, message = "Screen recording started" }
 end
 
-Commands.screenrecord = Commands.agent_screenrecord
-
-Commands.agent_screenrecord_status = function(args)
+AgentCommands.agent_screenrecord_status = function(args)
     return { success = true, data = _G.LUMEN_VIDEO_URL or "PENDING" }
 end
 
-Commands.screenrecord_status = Commands.agent_screenrecord_status
-
-Commands.exe = function(args)
-    return Commands.agent_execute(args)
-end
-
-Commands.screenshot = function(args)
-    _G.LUMEN_SCREENSHOT_URL = "PENDING"
-    captureScreenshot()
-    return { success = true, message = "Screenshot capture started" }
-end
-
-Commands.screenshot_status = function(args)
-    return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
-end
-
-Commands.agent_ping = function(args)
+AgentCommands.agent_ping = function(args)
     return {
         success = true,
         message = "pong",
@@ -374,25 +331,7 @@ Commands.agent_ping = function(args)
     }
 end
 
-Commands.ping = Commands.agent_ping
-
-Commands.agent_execute = function(args)
-    local script = args and args.script
-    if not script then return { success = false, error = "No script provided" } end
-
-    spawn(function()
-        pcall(function()
-            if script:match("^https?://") then
-                loadstring(game:HttpGet(script, true))()
-            else
-                loadstring(script)()
-            end
-        end)
-    end)
-    return { success = true, message = "Script executed" }
-end
-
-Commands.agent_status = function(args)
+AgentCommands.agent_status = function(args)
     local currentGame = nil
 
     pcall(function()
@@ -414,7 +353,7 @@ Commands.agent_status = function(args)
     }
 end
 
-Commands.agent_attach = function(args)
+AgentCommands.agent_attach = function(args)
     local placeId = args and args.place_id
     local autoScript = args and args.auto_script
 
@@ -763,12 +702,26 @@ AgentCommands.agent_collect_data = function(args)
     }
 end
 
-Commands.agent_disconnect = function(args)
+AgentCommands.agent_disconnect = function(args)
     IS_AGENT_MODE = false
     return {
         success = true,
         message = "Agent mode disabled"
     }
+end
+
+AgentCommands.exe = function(args)
+    return AgentCommands.agent_execute(args)
+end
+
+AgentCommands.agent_screenshot = function(args)
+    _G.LUMEN_SCREENSHOT_URL = "PENDING"
+    captureScreenshot()
+    return { success = true, message = "Screenshot capture started" }
+end
+
+AgentCommands.agent_screenshot_status = function(args)
+    return { success = true, data = _G.LUMEN_SCREENSHOT_URL or "PENDING" }
 end
 
 -- Regular command handlers
@@ -973,47 +926,38 @@ CommandHandlers.flowwatch = function(args)
                 added = {},
                 removed = {},
                 moved = {},
-                timestamp = os.time()
             }
 
             for path, data in pairs(currentState) do
                 if not FlowWatchState.initialState[path] then
-                    table.insert(changes.added, {
-                        path = path,
-                        name = data.name,
-                        class = data.class,
-                        parent = data.parent
-                    })
+                    table.insert(changes.added, data)
+                elseif FlowWatchState.initialState[path].parent ~= data.parent then
+                    table.insert(changes.moved, data)
                 end
             end
 
             for path, data in pairs(FlowWatchState.initialState) do
                 if not currentState[path] then
-                    table.insert(changes.removed, {
-                        path = path,
-                        name = data.name,
-                        class = data.class
-                    })
+                    table.insert(changes.removed, data)
                 end
             end
 
-            if #changes.added > 0 or #changes.removed > 0 then
-                table.insert(FlowWatchState.changes, changes)
+            if #changes.added > 0 or #changes.removed > 0 or #changes.moved > 0 then
+                table.insert(FlowWatchState.changes, {
+                    timestamp = os.time(),
+                    changes = changes
+                })
             end
-
-            FlowWatchState.initialState = currentState
         end
     end)
 
     return {
         success = true,
-        message = "FlowWatch started for " .. targetPlayer.Name,
-        player = targetPlayer.Name,
-        userId = targetPlayer.UserId
+        message = "FlowWatch active for " .. targetPlayer.Name
     }
 end
 
-CommandHandlers.flowwatch_poll = function(args)
+CommandHandlers.flowwatch_status = function(args)
     if not FlowWatchActive then
         return {
             success = false,
@@ -1021,21 +965,22 @@ CommandHandlers.flowwatch_poll = function(args)
         }
     end
 
-    local pendingChanges = FlowWatchState.changes
-    FlowWatchState.changes = {}
-
-    return {
+    local response = {
         success = true,
-        active = FlowWatchActive,
-        player = FlowWatchState.targetPlayer,
-        changes = pendingChanges
+        target = FlowWatchState.targetPlayer,
+        change_count = #FlowWatchState.changes,
+        recent_changes = {}
     }
+
+    for i = math.max(1, #FlowWatchState.changes - 5), #FlowWatchState.changes do
+        table.insert(response.recent_changes, FlowWatchState.changes[i])
+    end
+
+    return response
 end
 
 CommandHandlers.flowwatch_stop = function(args)
     FlowWatchActive = false
-    FlowWatchState = {}
-
     return {
         success = true,
         message = "FlowWatch stopped"
@@ -1043,161 +988,76 @@ CommandHandlers.flowwatch_stop = function(args)
 end
 
 CommandHandlers.buildmap = function(args)
-    print("🗺️ Building game map...")
+    print("🏗️ Building full game map tree...")
+    local tree = {}
 
-    local function getInstanceDetails(instance, depth, maxDepth)
-        depth = depth or 0
-        maxDepth = maxDepth or 10
+    local function scan(obj, depth)
+        if depth > 5 then return { name = "...", type = "Truncated" } end
 
-        if depth >= maxDepth then
-            return nil
+        local children = {}
+        local count = 0
+        for _, child in pairs(obj:GetChildren()) do
+            if count > 20 then break end
+            table.insert(children, scan(child, depth + 1))
+            count = count + 1
         end
 
-        local details = {
-            name = instance.Name,
-            class = instance.ClassName,
-            path = instance:GetFullName(),
-            children = {}
+        return {
+            name = obj.Name,
+            type = obj.ClassName,
+            children = children
         }
-
-        pcall(function()
-            if instance:IsA("Part") or instance:IsA("MeshPart") then
-                details.size = tostring(instance.Size)
-                details.position = tostring(instance.Position)
-            end
-        end)
-
-        for _, child in pairs(instance:GetChildren()) do
-            local childDetails = getInstanceDetails(child, depth + 1, maxDepth)
-            if childDetails then
-                table.insert(details.children, childDetails)
-            end
-        end
-
-        return details
     end
 
-    local function formatTree(node, indent, isLast)
-        indent = indent or ""
-        local output = ""
+    tree = scan(game, 0)
 
-        local prefix = isLast and "└── " or "├── "
-        local connector = isLast and "    " or "│   "
-
-        local info = node.name .. " [" .. node.class .. "]"
-        output = indent .. prefix .. info .. "\n"
-
-        for i, child in ipairs(node.children) do
-            local isLastChild = i == #node.children
-            output = output .. formatTree(child, indent .. connector, isLastChild)
-        end
-
-        return output
-    end
-
-    local gameMap = {
-        workspace = getInstanceDetails(game.Workspace, 0, 4),
-        replicatedStorage = getInstanceDetails(game.ReplicatedStorage, 0, 4)
+    return {
+        success = true,
+        tree = tree
     }
+end
 
-    local treeText = "╔═══════════════════════════════════════╗\n"
-    treeText = treeText .. "║        COMPLETE GAME MAP              ║\n"
-    treeText = treeText .. "╚═══════════════════════════════════════╝\n\n"
+CommandHandlers.dex = function(args)
+    local revamp = args and args.revamp
+    print("📲 Launching DEX Mobile...")
 
-    treeText = treeText .. "📂 Workspace\n"
-    for i, child in ipairs(gameMap.workspace.children) do
-        treeText = treeText .. formatTree(child, "", i == #gameMap.workspace.children)
+    if revamp then
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Babyhamsta/RBLX_Scripts/main/Universal/Bypassed_Dex.lua"))()
+    else
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))()
     end
 
     return {
         success = true,
-        tree = treeText,
-        data = gameMap,
-        stats = {
-            totalInstances = #game:GetDescendants(),
-            players = #Players:GetPlayers()
-        }
+        message = "DEX launched"
     }
 end
 
 CommandHandlers.exe = function(args)
     local script = args and args.script
+    if not script then return { success = false, error = "No script" } end
 
-    if not script or script == "" then
-        return {
-            success = false,
-            error = "No script provided"
-        }
-    end
-
-    print("⚡ Executing script...")
-
-    local success, err
-
-    if script:match("^https?://") then
-        success, err = pcall(function()
+    spawn(function()
+        if script:match("^https?://") then
             loadstring(game:HttpGet(script, true))()
-        end)
-    else
-        success, err = pcall(function()
+        else
             loadstring(script)()
-        end)
-    end
-
-    if success then
-        return {
-            success = true,
-            message = "Script executed successfully"
-        }
-    else
-        return {
-            success = false,
-            error = tostring(err)
-        }
-    end
-end
-
-CommandHandlers.dex = function(args)
-    if dexLoaded then
-        return {
-            success = false,
-            error = "DEX is already running. Rejoin the game to launch it again."
-        }
-    end
-
-    local revamp = args and args.revamp == true
-
-    local dexUrl = "https://raw.githubusercontent.com/raelhubfunctions/Save-scripts/refs/heads/main/DexMobile.lua"
-    local dexName = revamp and "DEX Mobile (Revamped)" or "Dark DEX Mobile"
-
-    local success, err = pcall(function()
-        loadstring(game:HttpGet(dexUrl, true))()
+        end
     end)
 
-    if success then
-        dexLoaded = true
-        return {
-            success = true,
-            message = dexName .. " launched successfully"
-        }
-    else
-        return {
-            success = false,
-            error = tostring(err)
-        }
-    end
+    return { success = true, message = "Script executed" }
 end
 
--- Function to send command response
-local function sendResponse(commandId, response, status)
-    local success, result = pcall(function()
-        local payload = HttpService:JSONEncode({
+-- Function to send response back to terminal
+local function sendResponse(commandId, responseData, status)
+    local success, err = pcall(function()
+        local body = HttpService:JSONEncode({
             command_id = commandId,
-            response = response,
+            response = responseData,
             status = status or "completed"
         })
 
-        local httpResponse = request({
+        return request({
             Url = RESPONSE_ENDPOINT,
             Method = "POST",
             Headers = {
@@ -1205,28 +1065,25 @@ local function sendResponse(commandId, response, status)
                 ["apikey"] = API_KEY,
                 ["Authorization"] = "Bearer " .. API_KEY
             },
-            Body = payload
+            Body = body
         })
-
-        return httpResponse.StatusCode == 200
     end)
 
-    return success
+    if not success then
+        warn("✗ Failed to send response: " .. tostring(err))
+    end
 end
 
 -- Function to poll for commands
 local function pollCommands()
     local success, result = pcall(function()
-        local url = COMMANDS_ENDPOINT .. "?account_id=" .. ACCOUNT_ID
-        local agentUrl = COMMANDS_ENDPOINT .. "?account_id=agent_" .. ACCOUNT_ID
-
         local commands = {}
 
+        -- Poll both general and account-specific commands
         local response = request({
-            Url = url,
+            Url = COMMANDS_ENDPOINT .. "?roblox_account_id=" .. ACCOUNT_ID,
             Method = "GET",
             Headers = {
-                ["Content-Type"] = "application/json",
                 ["apikey"] = API_KEY,
                 ["Authorization"] = "Bearer " .. API_KEY
             }
@@ -1239,11 +1096,11 @@ local function pollCommands()
             end
         end
 
+        -- Also poll agent commands if in agent mode
         local agentResponse = request({
-            Url = agentUrl,
+            Url = COMMANDS_ENDPOINT .. "?roblox_account_id=agent_" .. ACCOUNT_ID,
             Method = "GET",
             Headers = {
-                ["Content-Type"] = "application/json",
                 ["apikey"] = API_KEY,
                 ["Authorization"] = "Bearer " .. API_KEY
             }
@@ -1266,16 +1123,21 @@ local function pollCommands()
     end
 end
 
--- Smart command dispatcher (fixed: trims command name)
+-- Function to execute command
 local function executeCommand(cmd)
-    local rawName = tostring(cmd.command or "")
-    local commandName = rawName:match("^%s*(.-)%s*$") -- trims spaces/newlines
+    local commandName = cmd.command
     local commandId = cmd.id
     local args = cmd.args or {}
 
     print("⚡ Executing command: " .. commandName)
 
-    local handler = Commands[commandName]
+    local handler = nil
+
+    if commandName:match("^agent_") then
+        handler = AgentCommands[commandName]
+    else
+        handler = CommandHandlers[commandName]
+    end
 
     if handler then
         local success, result = pcall(function()
@@ -1291,23 +1153,23 @@ local function executeCommand(cmd)
                 warn("✗ Command failed: " .. commandName)
                 warn("  Error: " .. tostring(result.error))
             else
-                sendResponse(commandId, { error = "No result returned" }, "failed")
+                sendResponse(commandId, {error = "No result returned"}, "failed")
                 warn("✗ Command returned no result: " .. commandName)
             end
         else
-            sendResponse(commandId, { error = tostring(result) }, "failed")
+            sendResponse(commandId, {error = tostring(result)}, "failed")
             warn("✗ Command error: " .. tostring(result))
         end
     else
-        sendResponse(commandId, { error = "Unknown command: " .. commandName, raw = rawName }, "failed")
-        warn("✗ Unknown command: " .. commandName .. " (raw=" .. rawName .. ")")
+        sendResponse(commandId, {error = "Unknown command: " .. commandName}, "failed")
+        warn("✗ Unknown command: " .. commandName)
     end
 end
 
 -- Main polling loop
 local function startCommandListener()
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("✓ Lumen Command Executor Active!")
+    print("✓ Lumen Command Executor Active! - NEW!")
     print("✓ Account ID: " .. ACCOUNT_ID)
     print("✓ Listening for commands...")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
