@@ -2037,23 +2037,23 @@ def cmd_bubblechat():
                 is_target = str(msg.get("userId")) == str(target_id)
                 prefix_color = "\033[38;5;141m" if not is_target else "\033[38;5;135m"
                 print(f"  {prefix_color}{msg.get('text')}\033[0m")
-
-            # Non-blocking input would be complex in this TUI, so we'll do a simple input check
-            # but that blocks. A better way for real-time is to check for input periodically.
-            # However, the user wants "terminal real time" and "type everything you want".
-            # We'll use a prompt.
-
-            user_input = input("  >> ").strip()
-
-            if user_input.lower() in ["/exit", "/stop"]:
-                break
-
-            if user_input:
-                if use_agent:
-                    send_agent_command(target_id, "bubblechat_send", {"message": user_input})
-                else:
-                    send_command(target_id, "bubblechat_send", {"message": user_input})
-
+            
+            # Use non-blocking input with timeout
+            import select
+            print("  >> ", end="", flush=True)
+            rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+            
+            if rlist:
+                user_input = sys.stdin.readline().strip()
+                if user_input.lower() in ["/exit", "/stop"]:
+                    break
+                if user_input:
+                    if use_agent:
+                        send_agent_command(target_id, "bubblechat_send", {"message": user_input})
+                    else:
+                        send_command(target_id, "bubblechat_send", {"message": user_input})
+            else:
+                time.sleep(0.1)
     except KeyboardInterrupt:
         pass
 
