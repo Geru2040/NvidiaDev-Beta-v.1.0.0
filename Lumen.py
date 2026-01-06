@@ -1999,21 +1999,21 @@ def cmd_performance():
     print("  \033[38;5;93m→ Type 'stop' to return to main menu\033[0m\n")
 
     stop_event = threading.Event()
-    
+
     def monitor_loop():
         while not stop_event.is_set():
             status = send_agent_command(private_agent_id, "performance_status")
             if status.get("success"):
                 data = status.get("data", {})
-                
+
                 # Handle nested response structure
                 if isinstance(data, dict) and "response" in data:
                     data = data["response"]
-                
+
                 cpu = data.get("cpu", 0)
                 gpu = data.get("gpu", 0)
                 fps = data.get("fps", 0)
-                
+
                 # ANSI colors based on performance
                 cpu_color = "\033[38;5;46m" if cpu < 8 else "\033[38;5;226m" if cpu < 15 else "\033[38;5;196m"
                 gpu_color = "\033[38;5;46m" if gpu < 12 else "\033[38;5;226m" if gpu < 20 else "\033[38;5;196m"
@@ -2021,7 +2021,7 @@ def cmd_performance():
 
                 sys.stdout.write(f"\r  \033[38;5;141mCPU:\033[0m {cpu_color}{cpu:>5.2f}ms\033[0m | \033[38;5;135mGPU:\033[0m {gpu_color}{gpu:>5.2f}ms\033[0m | \033[38;5;93mFPS:\033[0m {fps_color}{fps:>4.1f}\033[0m    ")
                 sys.stdout.flush()
-            
+
             time.sleep(0.3)
 
     # Start the monitor thread
