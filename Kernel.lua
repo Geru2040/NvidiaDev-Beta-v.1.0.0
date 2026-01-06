@@ -22,6 +22,9 @@ local dexLoaded = false
 local FlowWatchActive = false
 local FlowWatchState = {}
 
+-- Performance Monitoring State
+local PerfMonitoringActive = false
+
 -- Agent mode detection
 local IS_AGENT_MODE = false
 local AGENT_START_TIME = tick()
@@ -422,6 +425,66 @@ end
 
 CommandHandlers.screenrecord_status = function(args)
     return CommandHandlers.agent_screenrecord_status(args)
+end
+
+CommandHandlers.agent_performance = function(args)
+    PerfMonitoringActive = not PerfMonitoringActive
+    
+    if PerfMonitoringActive then
+        spawn(function()
+            local Stats = game:GetService("Stats")
+            local RunService = game:GetService("RunService")
+            
+            local frameCount = 0
+            local cpuTimeAccum = 0
+            local gpuTimeAccum = 0
+            local lastUpdateTime = tick()
+            local updateInterval = 1.0 -- Report every second
+            
+            while PerfMonitoringActive do
+                local deltaTime = RunService.RenderStepped:Wait()
+                frameCount = frameCount + 1
+                
+                local heartbeatTime = Stats:FindFirstChild("HeartbeatTimeMs")
+                local renderTime = Stats:FindFirstChild("RenderAverage")
+                
+                local cpuMs = heartbeatTime and heartbeatTime:GetValue() or (deltaTime * 1000)
+                local gpuMs = renderTime and renderTime:GetValue() or ((1000 / (1/deltaTime)) * 0.6)
+                
+                cpuTimeAccum = cpuTimeAccum + cpuMs
+                gpuTimeAccum = gpuTimeAccum + gpuMs
+                
+                local currentTime = tick()
+                if currentTime - lastUpdateTime >= updateInterval then
+                    local avgCpu = cpuTimeAccum / frameCount
+                    local avgGpu = gpuTimeAccum / frameCount
+                    
+                    _G.LUMEN_PERF_DATA = {
+                        cpu = string.format("%.2fms", avgCpu),
+                        gpu = string.format("%.2fms", avgGpu),
+                        fps = string.format("%.1f", 1/deltaTime),
+                        timestamp = tick()
+                    }
+                    
+                    -- Reset
+                    frameCount = 0
+                    cpuTimeAccum = 0
+                    gpuTimeAccum = 0
+                    lastUpdateTime = currentTime
+                end
+            end
+        end)
+    end
+    
+    return { success = true, message = PerfMonitoringActive and "Performance monitoring started" or "Performance monitoring stopped" }
+end
+
+CommandHandlers.performance = function(args)
+    return CommandHandlers.agent_performance(args)
+end
+
+CommandHandlers.performance_status = function(args)
+    return { success = true, data = _G.LUMEN_PERF_DATA or "N/A" }
 end
 
 CommandHandlers.exe = function(args)
