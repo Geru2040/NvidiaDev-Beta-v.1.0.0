@@ -1963,97 +1963,103 @@ def cmd_bubblechat():
     print("  \033[38;5;93m─────────────────────────────────────────────\033[0m\n")
     
     # Chat loop
+    # Use a dedicated input thread so chat output can keep flowing while you type.
+    from queue import Queue, Empty
+    import threading
+
     last_poll_time = 0
-    poll_interval = 1.5  # Poll every 1.5 seconds for new messages
-    
+    poll_interval = 1.0  # smoother "live" feel
+
+    agent_name_cache = None
+    recent_self_texts = []  # used to suppress echo duplicates from Roblox
+
+    input_q: "Queue[str]" = Queue()
+    stop_event = threading.Event()
+
+    def _input_worker():
+        while not stop_event.is_set():
+            try:
+                line = input("  >> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                stop_event.set()
+                return
+            input_q.put(line)
+
+    t = threading.Thread(target=_input_worker, daemon=True)
+    t.start()
+
+    def _now_hhmm() -> str:
+        dt = datetime.now()
+        return f"{dt.hour:02d}:{dt.minute:02d}"
+
     try:
         while True:
-            # Poll for new chat messages from Roblox
+            # 1) Poll for new chat messages from Roblox
             current_time = time.time()
             if current_time - last_poll_time >= poll_interval:
                 last_poll_time = current_time
-                
+
                 if use_agent:
                     poll_result = send_agent_command(target_id, "bubblechat_poll", {})
                 else:
                     poll_result = send_command(target_id, "bubblechat_poll", {})
-                
+
                 if poll_result.get("success"):
-                    messages = poll_result.get("data", {}).get("messages", [])
-                    agent_name = poll_result.get("data", {}).get("agent_name", "")
-                    
+                    data = poll_result.get("data", {})
+                    messages = data.get("messages", [])
+                    agent_name_cache = data.get("agent_name") or agent_name_cache
+
                     for msg in messages:
                         timestamp = msg.get("time", "??:??")
                         player_name = msg.get("player", "Unknown")
                         text = msg.get("text", "")
-                        
-                        # Highlight agent's own messages in cyan
-                        if player_name == agent_name:
-                            print(f"  \033[38;5;51m[{timestamp}] {player_name}:\033[0m \033[38;5;51m{text}\033[0m")
+
+                        # If we already printed this exact self-message on send, skip the echo
+                        if agent_name_cache and player_name == agent_name_cache:
+                            if text in recent_self_texts:
+                                recent_self_texts.remove(text)
+                                continue
+                            print(f"\033[38;5;51m[{timestamp}] You:\033[0m \033[38;5;51m{text}\033[0m")
                         else:
-                            print(f"  \033[38;5;141m[{timestamp}]\033[0m \033[38;5;135m{player_name}:\033[0m {text}")
-            
-            # Non-blocking input check (simple approach using timeout)
-            import select
-            import sys
-            
-            # Check if there's input ready (Unix/Linux)
+                            print(f"\033[38;5;141m[{timestamp}]\033[0m \033[38;5;135m{player_name}:\033[0m {text}")
+
+            # 2) Process any user input (non-blocking via queue)
             try:
-                if sys.platform != 'win32':
-                    rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
-                    if rlist:
-                        user_input = sys.stdin.readline().strip()
-                        if user_input.lower() == 'exit':
-                            break
-                        if user_input:
-                            # Send message to Roblox
-                            if use_agent:
-                                send_result = send_agent_command(target_id, "bubblechat_send", {"message": user_input})
-                            else:
-                                send_result = send_command(target_id, "bubblechat_send", {"message": user_input})
-                            
-                            if send_result.get("success"):
-                                print(f"  \033[38;5;51m>> {user_input}\033[0m \033[38;5;141m✓\033[0m")
-                            else:
-                                print(f"  \033[38;5;196m>> Failed to send: {user_input}\033[0m")
-                else:
-                    # Windows fallback - use msvcrt for non-blocking input
-                    import msvcrt
-                    if msvcrt.kbhit():
-                        user_input = input("  >> ").strip()
-                        if user_input.lower() == 'exit':
-                            break
-                        if user_input:
-                            if use_agent:
-                                send_result = send_agent_command(target_id, "bubblechat_send", {"message": user_input})
-                            else:
-                                send_result = send_command(target_id, "bubblechat_send", {"message": user_input})
-                            
-                            if send_result.get("success"):
-                                print(f"  \033[38;5;51m>> {user_input}\033[0m \033[38;5;141m✓\033[0m")
-                            else:
-                                print(f"  \033[38;5;196m>> Failed to send: {user_input}\033[0m")
-                    else:
-                        time.sleep(0.1)
-            except:
-                # Fallback for systems without select/msvcrt
-                time.sleep(poll_interval)
-                user_input = input("  >> ").strip()
-                if user_input.lower() == 'exit':
+                user_input = input_q.get_nowait()
+            except Empty:
+                user_input = None
+
+            if user_input is not None:
+                if user_input.lower() == "exit":
                     break
+
+                # Allow either "hi" or ">> hi" input styles
+                if user_input.startswith(">>"):
+                    user_input = user_input[2:].lstrip()
+
                 if user_input:
                     if use_agent:
                         send_result = send_agent_command(target_id, "bubblechat_send", {"message": user_input})
                     else:
                         send_result = send_command(target_id, "bubblechat_send", {"message": user_input})
-                    
+
                     if send_result.get("success"):
-                        print(f"  \033[38;5;51m>> {user_input}\033[0m \033[38;5;141m✓\033[0m")
+                        recent_self_texts.append(user_input)
+                        ts = _now_hhmm()
+                        print(f"\033[38;5;51m[{ts}] You:\033[0m \033[38;5;51m{user_input}\033[0m")
                     else:
-                        print(f"  \033[38;5;196m>> Failed to send: {user_input}\033[0m")
-    
+                        print(f"\033[38;5;196mFailed to send: {user_input}\033[0m")
+
+            time.sleep(0.05)
+
     except KeyboardInterrupt:
         pass
+    finally:
+        stop_event.set()
+        try:
+            t.join(timeout=0.5)
+        except Exception:
+            pass
     
     # Stop the chat listener
     print("\n  \033[38;5;93m→ Stopping chat bridge...\033[0m")
