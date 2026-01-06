@@ -267,10 +267,10 @@ def get_agent_status_fast(agent_id):
         if not command_id:
             return None
 
-        # Reduced polling for faster checks
-        max_attempts = 6  # 3 seconds total
+        # Faster status polling
+        max_attempts = 30  # 3 seconds total
         for attempt in range(max_attempts):
-            time.sleep(0.5)
+            time.sleep(0.1)
 
             try:
                 status_response = requests.get(
@@ -1968,7 +1968,7 @@ def cmd_bubblechat():
     import threading
 
     last_poll_time = 0
-    poll_interval = 1.0  # smoother "live" feel
+    poll_interval = 0.2  # Much faster polling for live chat
 
     agent_name_cache = None
     recent_self_texts = []  # used to suppress echo duplicates from Roblox
