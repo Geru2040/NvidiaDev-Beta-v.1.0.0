@@ -1995,11 +1995,20 @@ def cmd_performance():
     print(f"  \033[38;5;93m→ Monitoring Agent: {private_agent_id}\033[0m")
     print("  \033[38;5;93m→ Press Ctrl+C or Ctrl+D to stop and return\033[0m\n")
 
+    # Give the monitoring loop time to gather initial data
+    print("  \033[38;5;93m→ Initializing monitoring...\033[0m")
+    time.sleep(1)
+
     try:
         while True:
             status = send_agent_command(private_agent_id, "performance_status")
             if status.get("success"):
                 data = status.get("data", {})
+                
+                # Handle nested response structure
+                if isinstance(data, dict) and "response" in data:
+                    data = data["response"]
+                
                 cpu = data.get("cpu", 0)
                 gpu = data.get("gpu", 0)
                 fps = data.get("fps", 0)
