@@ -1999,29 +1999,33 @@ def cmd_bubblechat():
             if current_time - last_poll_time >= poll_interval:
                 last_poll_time = current_time
 
-                if use_agent:
-                    poll_result = send_agent_command(target_id, "bubblechat_poll", {})
-                else:
-                    poll_result = send_command(target_id, "bubblechat_poll", {})
+                try:
+                    if use_agent:
+                        poll_result = send_agent_command(target_id, "bubblechat_poll", {})
+                    else:
+                        poll_result = send_command(target_id, "bubblechat_poll", {})
 
-                if poll_result.get("success"):
-                    data = poll_result.get("data", {})
-                    messages = data.get("messages", [])
-                    agent_name_cache = data.get("agent_name") or agent_name_cache
+                    if poll_result.get("success"):
+                        data = poll_result.get("data", {})
+                        messages = data.get("messages", [])
+                        agent_name_cache = data.get("agent_name") or agent_name_cache
 
-                    for msg in messages:
-                        timestamp = msg.get("time", "??:??")
-                        player_name = msg.get("player", "Unknown")
-                        text = msg.get("text", "")
+                        for msg in messages:
+                            timestamp = msg.get("time", "??:??")
+                            player_name = msg.get("player", "Unknown")
+                            text = msg.get("text", "")
 
-                        # If we already printed this exact self-message on send, skip the echo
-                        if agent_name_cache and player_name == agent_name_cache:
-                            if text in recent_self_texts:
-                                recent_self_texts.remove(text)
-                                continue
-                            print(f"\033[38;5;51m[{timestamp}] You:\033[0m \033[38;5;51m{text}\033[0m")
-                        else:
-                            print(f"\033[38;5;141m[{timestamp}]\033[0m \033[38;5;135m{player_name}:\033[0m {text}")
+                            # If we already printed this exact self-message on send, skip the echo
+                            if agent_name_cache and player_name == agent_name_cache:
+                                if text in recent_self_texts:
+                                    recent_self_texts.remove(text)
+                                    continue
+                                print(f"\033[38;5;51m[{timestamp}] You:\033[0m \033[38;5;51m{text}\033[0m")
+                            else:
+                                print(f"\033[38;5;141m[{timestamp}]\033[0m \033[38;5;135m{player_name}:\033[0m {text}")
+                except Exception as e:
+                    # Silently ignore transient errors during polling to keep the bridge alive
+                    pass
 
             # 2) Process any user input (non-blocking via queue)
             try:
