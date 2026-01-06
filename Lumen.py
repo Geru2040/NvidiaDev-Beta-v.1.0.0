@@ -182,15 +182,15 @@ def send_command(account_id, command, args=None):
             return {"success": False, "error": "No command_id returned"}
 
         # Increase poll attempts and timeout for slower commands
-        max_attempts = 60  # 30 seconds total
+        max_attempts = 200  # More attempts, even faster polling
         for attempt in range(max_attempts):
-            time.sleep(0.5)
+            time.sleep(0.05)  # Ultra-fast polling (0.05s instead of 0.1s)
 
             try:
                 status_response = requests.get(
                     f"{COMMAND_STATUS_ENDPOINT}?command_id={command_id}",
                     headers=headers,
-                    timeout=10
+                    timeout=5  # Lower timeout for status check
                 )
 
                 if status_response.status_code == 200:
