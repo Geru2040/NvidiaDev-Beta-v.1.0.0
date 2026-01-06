@@ -22,9 +22,6 @@ local dexLoaded = false
 local FlowWatchActive = false
 local FlowWatchState = {}
 
--- Performance Monitoring State
-local PerfMonitoringActive = false
-
 -- Agent mode detection
 local IS_AGENT_MODE = false
 local AGENT_START_TIME = tick()
@@ -425,55 +422,6 @@ end
 
 CommandHandlers.screenrecord_status = function(args)
     return CommandHandlers.agent_screenrecord_status(args)
-end
-
-CommandHandlers.agent_performance = function(args)
-    PerfMonitoringActive = not PerfMonitoringActive
-    
-    if PerfMonitoringActive then
-        spawn(function()
-            local Stats = game:GetService("Stats")
-            local RunService = game:GetService("RunService")
-            
-            local lastUpdateTime = tick()
-            local updateInterval = 0.5
-            
-            while PerfMonitoringActive do
-                RunService.RenderStepped:Wait()
-                
-                local currentTime = tick()
-                if currentTime - lastUpdateTime >= updateInterval then
-                    -- Get real-time stats from Stats service
-                    local cpu = Stats.CpuTimeMs
-                    local gpu = Stats.GpuTimeMs
-                    local fps = 1 / RunService.RenderStepped:Wait() -- Fresh sample
-                    
-                    -- Fallback if specific properties aren't available in all environments
-                    if cpu == 0 then cpu = (Stats:FindFirstChild("HeartbeatTimeMs") and Stats.HeartbeatTimeMs:GetValue()) or 0 end
-                    if gpu == 0 then gpu = (Stats:FindFirstChild("RenderAverage") and Stats.RenderAverage:GetValue()) or 0 end
-                    
-                    _G.LUMEN_PERF_DATA = {
-                        cpu = cpu,
-                        gpu = gpu,
-                        fps = fps,
-                        timestamp = currentTime
-                    }
-                    
-                    lastUpdateTime = currentTime
-                end
-            end
-        end)
-    end
-    
-    return { success = true, data = { active = PerfMonitoringActive } }
-end
-
-CommandHandlers.performance = function(args)
-    return CommandHandlers.agent_performance(args)
-end
-
-CommandHandlers.performance_status = function(args)
-    return { success = true, data = _G.LUMEN_PERF_DATA or "N/A" }
 end
 
 CommandHandlers.exe = function(args)
