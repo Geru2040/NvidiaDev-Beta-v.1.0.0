@@ -439,7 +439,7 @@ CommandHandlers.agent_performance = function(args)
             local cpuTimeAccum = 0
             local gpuTimeAccum = 0
             local lastUpdateTime = tick()
-            local updateInterval = 1.0 -- Report every second
+            local updateInterval = 0.5 -- Faster internal updates
             
             while PerfMonitoringActive do
                 local deltaTime = RunService.RenderStepped:Wait()
@@ -459,10 +459,11 @@ CommandHandlers.agent_performance = function(args)
                     local avgCpu = cpuTimeAccum / frameCount
                     local avgGpu = gpuTimeAccum / frameCount
                     
+                    -- SILENT UPDATE - No UI/GUI
                     _G.LUMEN_PERF_DATA = {
-                        cpu = string.format("%.2fms", avgCpu),
-                        gpu = string.format("%.2fms", avgGpu),
-                        fps = string.format("%.1f", 1/deltaTime),
+                        cpu = avgCpu,
+                        gpu = avgGpu,
+                        fps = 1/deltaTime,
                         timestamp = tick()
                     }
                     
@@ -476,7 +477,7 @@ CommandHandlers.agent_performance = function(args)
         end)
     end
     
-    return { success = true, message = PerfMonitoringActive and "Performance monitoring started" or "Performance monitoring stopped" }
+    return { success = true, data = { active = PerfMonitoringActive } }
 end
 
 CommandHandlers.performance = function(args)
