@@ -915,7 +915,7 @@ def cmd_agent_starlist():
 def cmd_screenrecord(args=None):
     """Silently capture screen recording from agent"""
     global private_agent_id
-    
+
     if not private_agent_id:
         clear()
         banner()
@@ -944,7 +944,7 @@ def cmd_screenrecord(args=None):
     print(f"  \033[38;5;93m→ This may take a minute...\033[0m\n")
 
     result = send_agent_command(private_agent_id, "agent_screenrecord", {"duration": duration})
-    
+
     if not result.get("success"):
         print(f"\n  \033[38;5;196m✗ Failed to initiate recording\033[0m")
         input("\n  Press Enter to continue...")
@@ -979,7 +979,7 @@ def cmd_screenrecord(args=None):
         dots = "." * ((attempt % 3) + 1) + " " * (2 - (attempt % 3))
         print(f"  \033[38;5;135m⏳ Processing{dots}\033[0m", end='\r', flush=True)
         time.sleep(1)
-        
+
         check_result = send_agent_command(private_agent_id, "agent_screenrecord_status")
         if check_result.get("success"):
             data = check_result.get("data")
@@ -1750,32 +1750,32 @@ def cmd_agent_status():
         print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
         time.sleep(1.5)
         return
-    
+
     clear()
     banner()
     print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
     print("\033[38;5;141m║              AGENT STATUS REPORT              ║\033[0m")
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
+
     print(f"  \033[38;5;93m→ Fetching detailed status for: {private_agent_id}...\033[0m\n")
-    
+
     status = get_agent_status(private_agent_id)
     if status:
         print(f"  \033[38;5;141m✓ Status:\033[0m ONLINE")
         print(f"  \033[38;5;135mUptime:\033[0m {status.get('uptime', 'N/A')} minutes")
-        
+
         if status.get('current_game'):
             game = status['current_game']
             print(f"  \033[38;5;135mGame:\033[0m {game.get('name', 'Unknown')}")
             print(f"  \033[38;5;135mPlace ID:\033[0m {game.get('place_id', 'Unknown')}")
             print(f"  \033[38;5;135mPlayers:\033[0m {game.get('players', 'N/A')}")
             print(f"  \033[38;5;135mSession Time:\033[0m {game.get('time_in_game', 'N/A')} minutes")
-        
+
         print(f"\n  \033[38;5;135mAnti-AFK:\033[0m {'Active' if status.get('anti_afk_active') else 'Inactive'}")
     else:
         print(f"  \033[38;5;196m✗ Status: OFFLINE\033[0m")
         print(f"  \033[38;5;93m→ Agent is not responding to requests\033[0m")
-        
+
     input("\n  Press Enter to continue...")
 
 def cmd_nameagent():
@@ -1785,13 +1785,13 @@ def cmd_nameagent():
         print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
         time.sleep(1.5)
         return
-    
+
     name = input("  Enter custom name → ").strip()
     if not name:
         print("\n  \033[38;5;196m✗ Name cannot be empty\033[0m")
         time.sleep(1)
         return
-    
+
     if set_agent_name(private_agent_id, name):
         print(f"\n  \033[38;5;141m✓ Agent renamed to: {name}\033[0m")
     else:
@@ -1805,7 +1805,7 @@ def cmd_staragent():
         print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
         time.sleep(1.5)
         return
-    
+
     success, result = star_agent(private_agent_id)
     if success:
         print(f"\n  \033[38;5;141m✓ Agent {private_agent_id} starred successfully!\033[0m")
@@ -1816,13 +1816,13 @@ def cmd_staragent():
 def cmd_agent_starlist():
     """View the currently starred agent"""
     starred = get_starred_agent()
-    
+
     clear()
     banner()
     print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
     print("\033[38;5;141m║            STARRED AGENT PROFILE              ║\033[0m")
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
+
     if not starred:
         print("  \033[38;5;196m✗ No starred agent found\033[0m")
         print("  \033[38;5;93m→ Use 'staragent' to mark a favorite agent\033[0m\n")
@@ -1848,7 +1848,7 @@ def cmd_agent_starlist():
         print(f"  \033[38;5;93mLast Used:\033[0m {last_used}")
     except:
         pass
-    
+
     input("\n  Press Enter to continue...")
 
 def cmd_agent_status():
@@ -1858,32 +1858,32 @@ def cmd_agent_status():
         print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
         time.sleep(1.5)
         return
-    
+
     clear()
     banner()
     print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
     print("\033[38;5;141m║              AGENT STATUS REPORT              ║\033[0m")
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
+
     print(f"  \033[38;5;93m→ Fetching detailed status for: {private_agent_id}...\033[0m\n")
-    
+
     status = get_agent_status(private_agent_id)
     if status:
         print(f"  \033[38;5;141m✓ Status:\033[0m ONLINE")
         print(f"  \033[38;5;135mUptime:\033[0m {status.get('uptime', 'N/A')} minutes")
-        
+
         if status.get('current_game'):
             game = status['current_game']
             print(f"  \033[38;5;135mGame:\033[0m {game.get('name', 'Unknown')}")
             print(f"  \033[38;5;135mPlace ID:\033[0m {game.get('place_id', 'Unknown')}")
             print(f"  \033[38;5;135mPlayers:\033[0m {game.get('players', 'N/A')}")
             print(f"  \033[38;5;135mSession Time:\033[0m {game.get('time_in_game', 'N/A')} minutes")
-        
+
         print(f"\n  \033[38;5;135mAnti-AFK:\033[0m {'Active' if status.get('anti_afk_active') else 'Inactive'}")
     else:
         print(f"  \033[38;5;196m✗ Status: OFFLINE\033[0m")
         print(f"  \033[38;5;93m→ Agent is not responding to requests\033[0m")
-        
+
     input("\n  Press Enter to continue...")
 
 def cmd_nameagent():
@@ -1893,13 +1893,13 @@ def cmd_nameagent():
         print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
         time.sleep(1.5)
         return
-    
+
     name = input("  Enter custom name → ").strip()
     if not name:
         print("\n  \033[38;5;196m✗ Name cannot be empty\033[0m")
         time.sleep(1)
         return
-    
+
     if set_agent_name(private_agent_id, name):
         print(f"\n  \033[38;5;141m✓ Agent renamed to: {name}\033[0m")
     else:
@@ -1913,7 +1913,7 @@ def cmd_staragent():
         print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
         time.sleep(1.5)
         return
-    
+
     success, result = star_agent(private_agent_id)
     if success:
         print(f"\n  \033[38;5;141m✓ Agent {private_agent_id} starred successfully!\033[0m")
@@ -1924,13 +1924,13 @@ def cmd_staragent():
 def cmd_agent_starlist():
     """View the currently starred agent"""
     starred = get_starred_agent()
-    
+
     clear()
     banner()
     print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
     print("\033[38;5;141m║            STARRED AGENT PROFILE              ║\033[0m")
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
-    
+
     if not starred:
         print("  \033[38;5;196m✗ No starred agent found\033[0m")
         print("  \033[38;5;93m→ Use 'staragent' to mark a favorite agent\033[0m\n")
@@ -1956,11 +1956,115 @@ def cmd_agent_starlist():
         print(f"  \033[38;5;93mLast Used:\033[0m {last_used}")
     except:
         pass
-    
+
     input("\n  Press Enter to continue...")
 
 def clear():
     print("\033[2J\033[H", end="")
+
+def cmd_bubblechat():
+    """Live chat interface with agent/port"""
+    global connected_account, private_agent_id
+
+    if not connected_account and not private_agent_id:
+        clear()
+        banner()
+        print("\n  \033[38;5;196m✗ No active connection\033[0m")
+        print("  \033[38;5;93m→ Run 'runport' or 'agent' command first\033[0m\n")
+        input("\n  Press Enter to continue...")
+        return
+
+    use_agent = private_agent_id and not connected_account
+    target_id = private_agent_id if use_agent else connected_account
+
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║            BUBBLE CHAT LIVE                   ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+
+    print(f"  \033[38;5;93m→ Connected to: {target_id} {'(Agent)' if use_agent else ''}\033[0m")
+    print("  \033[38;5;135m  → Initializing chat listener...\033[0m\n")
+
+    if use_agent:
+        result = send_agent_command(target_id, "bubblechat_start")
+    else:
+        result = send_command(target_id, "bubblechat_start")
+
+    if not result.get("success"):
+        print(f"\n  \033[38;5;196m✗ Failed to start BubbleChat\033[0m")
+        print(f"  Error: {result.get('error', 'Unknown')}")
+        input("\n  Press Enter to continue...")
+        return
+
+    print("  \033[38;5;93m──────────────────────────────────────────\033[0m")
+    print("  \033[38;5;93mCommands: '/exit' | '/stop' to quit\033[0m")
+    print("  \033[38;5;93mType anything to send a message to chat\033[0m")
+    print("  \033[38;5;93m──────────────────────────────────────────\033[0m\n")
+
+    import threading
+    import queue
+
+    chat_queue = queue.Queue()
+    stop_event = threading.Event()
+
+    def poll_chat():
+        while not stop_event.is_set():
+            try:
+                if use_agent:
+                    poll = send_agent_command(target_id, "bubblechat_poll")
+                else:
+                    poll = send_command(target_id, "bubblechat_poll")
+
+                if poll.get("success"):
+                    messages = poll.get("data", {}).get("messages", [])
+                    for msg in messages:
+                        chat_queue.put(msg)
+            except:
+                pass
+            time.sleep(1.5)
+
+    poll_thread = threading.Thread(target=poll_chat, daemon=True)
+    poll_thread.start()
+
+    try:
+        while True:
+            # Process all pending messages in queue
+            while not chat_queue.empty():
+                msg = chat_queue.get()
+                # Determine colors (Agent/Target is diff color)
+                # In main.py, target is target_id.
+                is_target = str(msg.get("userId")) == str(target_id)
+                prefix_color = "\033[38;5;141m" if not is_target else "\033[38;5;135m"
+                print(f"  {prefix_color}{msg.get('text')}\033[0m")
+
+            # Non-blocking input would be complex in this TUI, so we'll do a simple input check
+            # but that blocks. A better way for real-time is to check for input periodically.
+            # However, the user wants "terminal real time" and "type everything you want".
+            # We'll use a prompt.
+
+            user_input = input("  >> ").strip()
+
+            if user_input.lower() in ["/exit", "/stop"]:
+                break
+
+            if user_input:
+                if use_agent:
+                    send_agent_command(target_id, "bubblechat_send", {"message": user_input})
+                else:
+                    send_command(target_id, "bubblechat_send", {"message": user_input})
+
+    except KeyboardInterrupt:
+        pass
+
+    stop_event.set()
+    if use_agent:
+        send_agent_command(target_id, "bubblechat_stop")
+    else:
+        send_command(target_id, "bubblechat_stop")
+
+    print("\n  \033[38;5;141m✓ BubbleChat stopped\033[0m\n")
+    time.sleep(1)
 
 def banner():
     art = r"""   __   __  ____  ________  __
@@ -2001,6 +2105,7 @@ def main():
         print("  \033[38;5;93m• search\033[0m        → Search ScriptBlox/RScripts")
         print("  \033[38;5;93m• screenshot\033[0m    → Silent screenshot capture")
         print("  \033[38;5;93m• screenrecord\033[0m  → Silent screen record (--5 max)")
+        print("  \033[38;5;93m• bubblechat\033[0m    → Live chat interface")
 
         print("\n  \033[38;5;135mAGENT COMMANDS:\033[0m")
         print("  \033[38;5;141m• agent\033[0m         → Setup private agent")
@@ -2043,6 +2148,8 @@ def main():
         elif choice.startswith("screenrecord"):
             parts = choice.split()
             cmd_screenrecord(parts[1:] if len(parts) > 1 else None)
+        elif choice == "bubblechat":
+            cmd_bubblechat()
         elif choice == "agent":
             cmd_agent()
         elif choice == "agent --list":
@@ -2062,7 +2169,7 @@ def main():
             cmd_name = choice.split()[0]
             if cmd_name == "agent_ping": # Special case for ping
                 cmd_name = "ping"
-                
+
             if connected_account:
                 result = send_command(connected_account, cmd_name, {"args": choice.split()[1:]})
                 if result.get("success"):
