@@ -2005,17 +2005,14 @@ def cmd_performance():
                 fps = data.get("fps", 0)
                 
                 # ANSI colors based on performance
-                cpu_color = "\033[38;5;46m" if cpu < 5 else "\033[38;5;226m" if cpu < 10 else "\033[38;5;196m"
-                gpu_color = "\033[38;5;46m" if gpu < 10 else "\033[38;5;226m" if gpu < 16 else "\033[38;5;196m"
+                cpu_color = "\033[38;5;46m" if cpu < 8 else "\033[38;5;226m" if cpu < 15 else "\033[38;5;196m"
+                gpu_color = "\033[38;5;46m" if gpu < 12 else "\033[38;5;226m" if gpu < 20 else "\033[38;5;196m"
                 fps_color = "\033[38;5;46m" if fps > 50 else "\033[38;5;226m" if fps > 30 else "\033[38;5;196m"
 
                 sys.stdout.write(f"\r  \033[38;5;141mCPU:\033[0m {cpu_color}{cpu:>5.2f}ms\033[0m | \033[38;5;135mGPU:\033[0m {gpu_color}{gpu:>5.2f}ms\033[0m | \033[38;5;93mFPS:\033[0m {fps_color}{fps:>4.1f}\033[0m    ")
                 sys.stdout.flush()
-            else:
-                sys.stdout.write("\r  \033[38;5;244mWaiting for data...\033[0m    ")
-                sys.stdout.flush()
             
-            time.sleep(0.5)
+            time.sleep(0.3) # Faster poll rate (3.3Hz)
     except (KeyboardInterrupt, EOFError):
         # Stop monitoring on target
         send_agent_command(private_agent_id, "agent_performance")
