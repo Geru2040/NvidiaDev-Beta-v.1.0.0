@@ -1998,8 +1998,8 @@ def cmd_performance():
     try:
         while True:
             status = send_agent_command(private_agent_id, "performance_status")
-            if status.get("success") and status.get("data") != "N/A":
-                data = status["data"]
+            if status.get("success"):
+                data = status.get("data", {})
                 cpu = data.get("cpu", 0)
                 gpu = data.get("gpu", 0)
                 fps = data.get("fps", 0)
@@ -2011,8 +2011,11 @@ def cmd_performance():
 
                 sys.stdout.write(f"\r  \033[38;5;141mCPU:\033[0m {cpu_color}{cpu:>5.2f}ms\033[0m | \033[38;5;135mGPU:\033[0m {gpu_color}{gpu:>5.2f}ms\033[0m | \033[38;5;93mFPS:\033[0m {fps_color}{fps:>4.1f}\033[0m    ")
                 sys.stdout.flush()
+            else:
+                sys.stdout.write(f"\r  \033[38;5;244mWaiting for data... ({status.get('error', 'No connection')})\033[0m    ")
+                sys.stdout.flush()
             
-            time.sleep(0.3) # Faster poll rate (3.3Hz)
+            time.sleep(0.3)
     except (KeyboardInterrupt, EOFError):
         # Stop monitoring on target
         send_agent_command(private_agent_id, "agent_performance")
