@@ -1972,8 +1972,11 @@ def banner():
     print("  Game Data Capture & AI Analysis")
     print("  ═══════════════════════════════\n")
 
+import threading
+import queue
+
 def cmd_performance():
-    """Real-time performance monitoring"""
+    """Real-time performance monitoring with background updates"""
     global private_agent_id
     if not private_agent_id:
         print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
@@ -1993,14 +1996,12 @@ def cmd_performance():
     print("\033[38;5;141m║          REAL-TIME PERFORMANCE MONITOR        ║\033[0m")
     print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
     print(f"  \033[38;5;93m→ Monitoring Agent: {private_agent_id}\033[0m")
-    print("  \033[38;5;93m→ Press Ctrl+C or Ctrl+D to stop and return\033[0m\n")
+    print("  \033[38;5;93m→ Type 'stop' to return to main menu\033[0m\n")
 
-    # Give the monitoring loop time to gather initial data
-    print("  \033[38;5;93m→ Initializing monitoring...\033[0m")
-    time.sleep(1)
-
-    try:
-        while True:
+    stop_event = threading.Event()
+    
+    def monitor_loop():
+        while not stop_event.is_set():
             status = send_agent_command(private_agent_id, "performance_status")
             if status.get("success"):
                 data = status.get("data", {})
@@ -2020,16 +2021,31 @@ def cmd_performance():
 
                 sys.stdout.write(f"\r  \033[38;5;141mCPU:\033[0m {cpu_color}{cpu:>5.2f}ms\033[0m | \033[38;5;135mGPU:\033[0m {gpu_color}{gpu:>5.2f}ms\033[0m | \033[38;5;93mFPS:\033[0m {fps_color}{fps:>4.1f}\033[0m    ")
                 sys.stdout.flush()
-            else:
-                sys.stdout.write(f"\r  \033[38;5;244mWaiting for data... ({status.get('error', 'No connection')})\033[0m    ")
-                sys.stdout.flush()
             
             time.sleep(0.3)
+
+    # Start the monitor thread
+    t = threading.Thread(target=monitor_loop)
+    t.daemon = True
+    t.start()
+
+    try:
+        while True:
+            cmd = input("\n  → ").strip().lower()
+            if cmd == "stop":
+                break
+            elif cmd:
+                # Allow executing other commands while monitoring? 
+                # For now just keep it simple as requested
+                pass
     except (KeyboardInterrupt, EOFError):
-        # Stop monitoring on target
-        send_agent_command(private_agent_id, "agent_performance")
-        print("\n\n  \033[38;5;141m✓ Monitoring stopped\033[0m")
-        time.sleep(1)
+        pass
+
+    stop_event.set()
+    # Stop monitoring on target
+    send_agent_command(private_agent_id, "agent_performance")
+    print("\n\n  \033[38;5;141m✓ Monitoring stopped\033[0m")
+    time.sleep(1)
 
 def main():
     while True:
