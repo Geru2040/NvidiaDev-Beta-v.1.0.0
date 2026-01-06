@@ -1972,6 +1972,56 @@ def banner():
     print("  Game Data Capture & AI Analysis")
     print("  ═══════════════════════════════\n")
 
+def cmd_performance():
+    """Real-time performance monitoring"""
+    global private_agent_id
+    if not private_agent_id:
+        print("\n  \033[38;5;196m✗ No private agent connected\033[0m")
+        time.sleep(1.5)
+        return
+
+    # Start monitoring
+    result = send_agent_command(private_agent_id, "agent_performance")
+    if not result.get("success"):
+        print(f"\n  \033[38;5;196m✗ Failed to start performance monitoring\033[0m")
+        time.sleep(1.5)
+        return
+
+    clear()
+    banner()
+    print("\033[38;5;141m╔═══════════════════════════════════════════════╗\033[0m")
+    print("\033[38;5;141m║          REAL-TIME PERFORMANCE MONITOR        ║\033[0m")
+    print("\033[38;5;141m╚═══════════════════════════════════════════════╝\033[0m\n")
+    print(f"  \033[38;5;93m→ Monitoring Agent: {private_agent_id}\033[0m")
+    print("  \033[38;5;93m→ Press Ctrl+C or Ctrl+D to stop and return\033[0m\n")
+
+    try:
+        while True:
+            status = send_agent_command(private_agent_id, "performance_status")
+            if status.get("success") and status.get("data") != "N/A":
+                data = status["data"]
+                cpu = data.get("cpu", 0)
+                gpu = data.get("gpu", 0)
+                fps = data.get("fps", 0)
+                
+                # ANSI colors based on performance
+                cpu_color = "\033[38;5;46m" if cpu < 5 else "\033[38;5;226m" if cpu < 10 else "\033[38;5;196m"
+                gpu_color = "\033[38;5;46m" if gpu < 10 else "\033[38;5;226m" if gpu < 16 else "\033[38;5;196m"
+                fps_color = "\033[38;5;46m" if fps > 50 else "\033[38;5;226m" if fps > 30 else "\033[38;5;196m"
+
+                sys.stdout.write(f"\r  \033[38;5;141mCPU:\033[0m {cpu_color}{cpu:>5.2f}ms\033[0m | \033[38;5;135mGPU:\033[0m {gpu_color}{gpu:>5.2f}ms\033[0m | \033[38;5;93mFPS:\033[0m {fps_color}{fps:>4.1f}\033[0m    ")
+                sys.stdout.flush()
+            else:
+                sys.stdout.write("\r  \033[38;5;244mWaiting for data...\033[0m    ")
+                sys.stdout.flush()
+            
+            time.sleep(0.5)
+    except (KeyboardInterrupt, EOFError):
+        # Stop monitoring on target
+        send_agent_command(private_agent_id, "agent_performance")
+        print("\n\n  \033[38;5;141m✓ Monitoring stopped\033[0m")
+        time.sleep(1)
+
 def main():
     while True:
         clear()
@@ -2010,6 +2060,7 @@ def main():
         print("  \033[38;5;141m• agentstatus\033[0m   → View agent status")
         print("  \033[38;5;141m• nameagent\033[0m     → Name an agent")
         print("  \033[38;5;141m• staragent\033[0m     → Star favorite agent")
+        print("  \033[38;5;141m• performance\033[0m   → Real-time CPU/GPU stats")
 
         print("\n  \033[38;5;93m• exit\033[0m          → Exit Lumen")
         print("\n  ───────────────────────────────────────────\n")
@@ -2057,6 +2108,8 @@ def main():
             cmd_nameagent()
         elif choice == "staragent":
             cmd_staragent()
+        elif choice == "performance":
+            cmd_performance()
         else:
             # Fallback for dynamic commands
             cmd_name = choice.split()[0]
