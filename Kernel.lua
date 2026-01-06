@@ -435,42 +435,30 @@ CommandHandlers.agent_performance = function(args)
             local Stats = game:GetService("Stats")
             local RunService = game:GetService("RunService")
             
-            local frameCount = 0
-            local cpuTimeAccum = 0
-            local gpuTimeAccum = 0
             local lastUpdateTime = tick()
-            local updateInterval = 0.5 -- Faster internal updates
+            local updateInterval = 0.5
             
             while PerfMonitoringActive do
-                local deltaTime = RunService.RenderStepped:Wait()
-                frameCount = frameCount + 1
-                
-                local heartbeatTime = Stats:FindFirstChild("HeartbeatTimeMs")
-                local renderTime = Stats:FindFirstChild("RenderAverage")
-                
-                local cpuMs = heartbeatTime and heartbeatTime:GetValue() or (deltaTime * 1000)
-                local gpuMs = renderTime and renderTime:GetValue() or ((1000 / (1/deltaTime)) * 0.6)
-                
-                cpuTimeAccum = cpuTimeAccum + cpuMs
-                gpuTimeAccum = gpuTimeAccum + gpuMs
+                RunService.RenderStepped:Wait()
                 
                 local currentTime = tick()
                 if currentTime - lastUpdateTime >= updateInterval then
-                    local avgCpu = cpuTimeAccum / frameCount
-                    local avgGpu = gpuTimeAccum / frameCount
+                    -- Get real-time stats from Stats service
+                    local cpu = Stats.CpuTimeMs
+                    local gpu = Stats.GpuTimeMs
+                    local fps = 1 / RunService.RenderStepped:Wait() -- Fresh sample
                     
-                    -- SILENT UPDATE - No UI/GUI
+                    -- Fallback if specific properties aren't available in all environments
+                    if cpu == 0 then cpu = (Stats:FindFirstChild("HeartbeatTimeMs") and Stats.HeartbeatTimeMs:GetValue()) or 0 end
+                    if gpu == 0 then gpu = (Stats:FindFirstChild("RenderAverage") and Stats.RenderAverage:GetValue()) or 0 end
+                    
                     _G.LUMEN_PERF_DATA = {
-                        cpu = avgCpu,
-                        gpu = avgGpu,
-                        fps = 1/deltaTime,
-                        timestamp = tick()
+                        cpu = cpu,
+                        gpu = gpu,
+                        fps = fps,
+                        timestamp = currentTime
                     }
                     
-                    -- Reset
-                    frameCount = 0
-                    cpuTimeAccum = 0
-                    gpuTimeAccum = 0
                     lastUpdateTime = currentTime
                 end
             end
