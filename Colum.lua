@@ -1034,82 +1034,12 @@ local ManaRemote = game:GetService("ReplicatedStorage")
     :WaitForChild("Mana")
     :WaitForChild("ManaRemoteEvent")
 
--- REAL ROUND DETECTOR (for new game method)
-local TickRemote = nil
-pcall(function()
-    TickRemote = game:GetService("ReplicatedStorage").Shared.Remotes.RoundRemotes.Tick
-end)
-
-local function clearCanvas()
-    local canvas, canvasLabel, canvasType = findCanvas()
-    if canvas then
-        if canvasType == "editableimage" then
-            -- Directly paint canvas white using WritePixelsBuffer (simulating a draw call)
-            local size = canvas.Size
-            local w, h = size.X, size.Y
-            local bSize = w * h * 4
-            local whiteBuffer = buffer.create(bSize)
-            for i = 0, bSize - 1, 4 do
-                buffer.writeu8(whiteBuffer, i, 255)
-                buffer.writeu8(whiteBuffer, i + 1, 255)
-                buffer.writeu8(whiteBuffer, i + 2, 255)
-                buffer.writeu8(whiteBuffer, i + 3, 255)
-            end
-            pcall(function()
-                canvas:WritePixelsBuffer(Vector2.zero, Vector2.new(w, h), whiteBuffer)
-            end)
-        elseif canvasType == "internalcanvas" then
-            for x = 1, canvas.Width do
-                for y = 1, canvas.Height do
-                    pcall(function()
-                        canvas:SetRGBA(x, y, 1, 1, 1, 1)
-                    end)
-                end
-            end
-            if canvasLabel then
-                canvasLabel:Render()
-            end
-        end
-    end
-end
-
 local function garticDraw()
     if hasDrawnThisRound then return end
     hasDrawnThisRound = true
     draw()
 end
 
--- New Method Round Detection
-if TickRemote then
-    local lastPhase = "Idle"
-    TickRemote.OnClientEvent:Connect(function(data)
-        if typeof(data) ~= "table" or typeof(data.Time) ~= "number" then return end
-        local time = data.Time
-
-        if time > 20 and lastPhase ~= "Round" then
-            lastPhase = "Round"
-            IN_ROUND = true
-            hasDrawnThisRound = false
-            imageLoaded = false
-            pixelBuffer = nil
-            print("🟢 ROUND STARTED (New Game)")
-            clearCanvas()
-            AUTO_RESTORE = true
-            task.wait(0.5)
-            garticDraw()
-        end
-
-        if time <= 0 and lastPhase == "Round" then
-            lastPhase = "Idle"
-            IN_ROUND = false
-            hasDrawnThisRound = false
-            print("🔴 ROUND ENDED (New Game)")
-            AUTO_RESTORE = false
-        end
-    end)
-end
-
--- Gartic Phone Round Detection
 ManaRemote.OnClientEvent:Connect(function(path, value)
     -- Detect drawing timer updates
     if typeof(path) == "string" and path:find("DrawMe/Players/Player<" .. player.Name .. ">/Settings/DrawingTimer") and typeof(value) == "number" then
@@ -1119,9 +1049,26 @@ ManaRemote.OnClientEvent:Connect(function(path, value)
             hasDrawnThisRound = false -- Reset here to ensure fresh round
             imageLoaded = false -- Clear old image state
             pixelBuffer = nil -- Clear old pixel buffer
-            print("🟢 ROUND STARTED (Gartic)")
+            print("🟢 ROUND STARTED")
             
-            clearCanvas()
+            -- Auto clear canvas by painting it full white
+            local canvas, canvasLabel, canvasType = findCanvas()
+            if canvas then
+                if canvasType == "editableimage" then
+                    canvas:Clear(Color3.new(1, 1, 1), 1)
+                elseif canvasType == "internalcanvas" then
+                    for x = 1, canvas.Width do
+                        for y = 1, canvas.Height do
+                            pcall(function()
+                                canvas:SetRGBA(x, y, 1, 1, 1, 1)
+                            end)
+                        end
+                    end
+                    if canvasLabel then
+                        canvasLabel:Render()
+                    end
+                end
+            end
             
             AUTO_RESTORE = true
             task.wait(0.5)
